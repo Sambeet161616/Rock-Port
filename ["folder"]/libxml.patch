@@ -1,0 +1,31 @@
+--- libxml2-2.7.8/nanohttp.c	2010-11-04 11:36:31.000000000 +0100
++++ libxml2-2.7.8/nanohttp.c	2011-10-18 04:44:05.607022613 +0200
+@@ -67,6 +67,7 @@
+ #ifdef SUPPORT_IP6
+ #include <resolv.h>
+ #endif
++#undef HAVE_ZLIB_H
+ #ifdef HAVE_ZLIB_H
+ #include <zlib.h>
+ #endif
+@@ -582,7 +583,10 @@ xmlNanoHTTPRecv(xmlNanoHTTPCtxtPtr ctxt)
+                     break;
+ 
+                 case ECONNRESET:
++
++#if defined(ESHUTDOWN)
+                 case ESHUTDOWN:
++#endif
+                     return (0);
+ 
+                 default:
+--- libxml2-2.7.8/xmlIO.c	2010-10-12 08:25:32.000000000 +0200
++++ libxml2-2.7.8/xmlIO.c	2011-10-18 04:43:11.242019549 +0200
+@@ -32,6 +32,7 @@
+ #ifdef HAVE_STDLIB_H
+ #include <stdlib.h>
+ #endif
++#undef HAVE_ZLIB_H
+ #ifdef HAVE_ZLIB_H
+ #include <zlib.h>
+ #endif
