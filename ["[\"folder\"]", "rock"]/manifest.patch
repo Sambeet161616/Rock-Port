@@ -1,0 +1,15 @@
+--- rock/autoproj/manifest    2011-09-10 19:52:17.000000000 +0200
++++ rock/autoproj/manifest    2011-10-08 22:03:43.331913372 +0200
+@@ -48,7 +48,9 @@ layout:
+ # For instance, let's assume the orocos/rtt is already installed on your
+ # machine. You would then simply do:
+ #
+-# ignored_packages:
+-#   - orocos/rtt
++ignore_packages:
++   - tools/logger
++   - tools/service_discovery
++ 
+ #
+ 
+

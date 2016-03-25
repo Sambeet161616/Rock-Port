@@ -1,0 +1,98 @@
+--- rock/base/templates/cmake_lib/cmake/rtems_toolchain.cmake	1970-01-01 01:00:00.000000000 +0100
++++ rock/base/templates/cmake_lib/cmake/rtems_toolchain.cmake	2011-10-16 14:39:35.037333301 +0200
+@@ -0,0 +1,74 @@
++INCLUDE(CMakeForceCompiler)
++
++SET(INSTALL_PREFIX $ENV{INSTALL_PREFIX})
++SET(TARGET $ENV{TARGET})
++SET(BSP $ENV{BSP})
++
++SET(CMAKE_SYSTEM_NAME RTEMS)
++
++CMAKE_FORCE_C_COMPILER($ENV{TARGET}-gcc GNU)
++CMAKE_FORCE_CXX_COMPILER($ENV{TARGET}-g++ GNU)
++
++SET(__BSD_VISIBLE 1)
++
++add_definitions("-B${INSTALL_PREFIX}/rtems/${TARGET}/${BSP}/lib/ -specs bsp_specs -qrtems  -D__RTEMS__ -DBoost_USE_STATIC_LIBS -D__BSD_VISIBLE -DBOOST_SYSTEM_NO_DEPRECATED   -DBOOST_DISABLE_THREADS  -DRUBY_EXTENSIONS_AVAILABLE=NO")
++
++add_definitions ("-fpermissive -fexceptions")
++
++IF ("${TARGET}" MATCHES "i?86-*")
++       add_definitions ("-D__i386__ -Wl,-Ttext,0x00100000")
++ELSEIF ("${TARGET}" MATCHES "sparc-*")
++        add_definitions ("-D__SPARC__")
++ENDIF()
++
++SET(CMAKE_CROSSCOMPILING ON)
++
++SET(EIGEN2_INCLUDE_DIR $ENV{INSTALL_PREFIX}/eigen/include)
++
++SET(BOOST_ROOT $ENV{INSTALL_PREFIX}/boost/)
++SET(BOOST_INCLUDEDIR $ENV{INSTALL_PREFIX}boost/include)
++SET(BOOST_LIBRARYDIR $ENV{INSTALL_PREFIX}boost/lib)
++
++SET(Boost_USE_STATIC_LIBS ON)
++SET(Boost_ADDITIONAL_VERSIONS "1.44.0" "1.44")
++SET(Boost_COMPILER -rtems4.10)
++
++SET(OMNIORB_INCLUDEDIR  $ENV{INSTALL_PREFIX}/omniORB/include)
++
++include_directories(${BOOST_INCLUDEDIR} ${OMNIORB_INCLUDEDIR} ${EIGEN2_INCLUDE_DIR})
++
++SET(DCMAKE_SYSTEM_NAME RTEMS)
++
++SET(CMAKE_SHARED_LIBRARY_C_FLAGS "")              # -pic 
++SET(CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS "")       # -shared
++SET(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS "")         # +s, flag for exe link to use shared lib
++SET(CMAKE_SHARED_LIBRARY_RUNTIME_C_FLAG "")       # -rpath
++SET(CMAKE_SHARED_LIBRARY_RUNTIME_C_FLAG_SEP "")   # : or empty
++
++SET(CMAKE_LINK_LIBRARY_SUFFIX "")
++SET(CMAKE_STATIC_LIBRARY_PREFIX "lib")
++SET(CMAKE_STATIC_LIBRARY_SUFFIX ".a")
++SET(CMAKE_SHARED_LIBRARY_PREFIX "lib")          # lib
++SET(CMAKE_SHARED_LIBRARY_SUFFIX ".a")           # .a
++SET(CMAKE_EXECUTABLE_SUFFIX ".bin")             #
++SET(CMAKE_DL_LIBS "" )
++
++SET(CMAKE_FIND_LIBRARY_PREFIXES "lib")
++SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
++
++# RTEMS doesn't support shared libs
++SET_PROPERTY(GLOBAL PROPERTY TARGET_SUPPORTS_SHARED_LIBS FALSE)
++SET(CMAKE_CXX_LINK_SHARED_LIBRARY )
++SET(CMAKE_CXX_LINK_MODULE_LIBRARY )
++SET(CMAKE_C_LINK_SHARED_LIBRARY )
++SET(CMAKE_C_LINK_MODULE_LIBRARY )
++
++# set flags 
++message("-- Setting static RTEMS")
++SET(BUILD_STATIC ON)
++
++message("-- Not building shared")
++SET(NOT_BUILD_SHARED ON)
++
++#Include rtems directories and libraries
++include_directories (${INSTALL_PREFIX}/rtems/${TARGET}/${BSP}/lib/include ${INSTALL_PREFIX}/rtems/${TARGET}/include ${INSTALL_PREFIX}${TARGET}/${BSP}/lib/include/networking)
+--- rock/base/scripts/bin/rock-create-lib	2011-09-10 19:52:12.000000000 +0200
++++ rock/base/scripts/bin/rock-create-lib	2011-10-16 15:13:55.885332907 +0200
+@@ -24,7 +24,17 @@ if test -z "$ROCK_TEMPLATE_PREFIX"; then
+     ROCK_TEMPLATE_PREFIX=git://gitorious.org/rock-base/template_
+     ROCK_TEMPLATE_SUFFIX=.git
+ fi
+-git clone ${ROCK_TEMPLATE_PREFIX}cmake_lib${ROCK_TEMPLATE_SUFFIX} $path
++
++#TODO: replace clone by git clone
++if test $OROCOS_TARGET = "rtems" ; then
++   echo "Creating RTEMS cmake"
++   git clone ${ROCK_TEMPLATE_PREFIX}cmake_lib${ROCK_TEMPLATE_SUFFIX} $path
++   mkdir  $path/cmake
++   cp -r  $BUILD_PREFIX/rock/base/templates/cmake_lib/cmake/* $path/cmake/
++else
++   git clone ${ROCK_TEMPLATE_PREFIX}cmake_lib${ROCK_TEMPLATE_SUFFIX} $path
++fi
++
+ cd $path
+ ./config.sh $name
+ 

@@ -1,0 +1,43 @@
+--- rock/external/resource_create/resource_create.rb 2011-09-10 19:52:15.000000000 +0200
++++ rock/external/resource_create/resource_create.rb 2011-10-06 19:38:33.733107001 +0200
+@@ -0,0 +1,40 @@
++#!/usr/bin/env ruby
++
++require 'find'
++
++class Resource
++   def search
++      #buildir = ENV['BUILD_PREFIX']
++      resource_path = ARGV[0];
++      if resource_path == nil
++         puts "Usage error: resorce_create + DIR"
++         return
++      end
++      srcdir = resource_path # also .orogen
++
++      resource = File.open(resource_path+"/resource.h","w") 
++      resource.write("static char* resource[][2]={")
++
++      Find.find(srcdir) do |f|
++         write(f,resource) if f.match('tlb$')
++         resource.write(",") if f.match('tlb$')
++      end
++
++      resource.write("};")
++   end
++
++   def write(file, resource)
++      f = File.open(file,"r")
++      resource.write("{\"/etc/#{File.basename(file)}\",\n\"")
++      #resource.write("{\"#{file}\",\n\"")
++      while line = f.gets
++         line = line.gsub("\"","\\\"")
++         line = line.gsub(/\n/,"\\n")
++         resource.write(line)
++      end
++      resource.write("\"}\n")
++   end
++end
++
++resource = Resource.new
++resource.search()

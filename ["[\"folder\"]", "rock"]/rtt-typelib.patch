@@ -1,0 +1,64 @@
+--- rock/tools/orogen/rtt-typelib/CMakeLists.txt	2011-09-10 19:52:13.000000000 +0200
++++ rock/tools/orogen/rtt-typelib/CMakeLists.txt 	2011-10-07 14:38:48.357107000 +0200
+@@ -1,4 +1,34 @@
+ cmake_minimum_required(VERSION 2.6)
++
++if ($ENV{OROCOS_TARGET} STREQUAL "rtems")
++    #TODO: clean with find boost and find omniorb
++    set(RTEMS_INSTALL_DIR $ENV{RTEMS_INSTALL_DIR} CACHE PATH "path to rtems installation dir" FORCE)
++    set(RTEMS_CC_PREFIX $ENV{TARGET})
++    set(INSTALL_PREFIX $ENV{INSTALL_PREFIX})
++    set(BSP $ENV{BSP})
++
++    set(RTEMS_BUILD ${INSTALL_PREFIX}/rtems/${RTEMS_CC_PREFIX})
++    set(RTEMS_INSTALL_POINT ${INSTALL_PREFIX}/rtems)
++    set(RTEMS_INSTALL_DIR ${RTEMS_INSTALL_POINT})
++    set(PROJECT_RELEASE ${RTEMS_BUILD}/${BSP})
++    set(PROJECT_TOOLS ${RTEMS_BUILD}/${BSP}/build-tools)
++
++    set(CMAKE_C_COMPILER ${RTEMS_INSTALL_POINT}/bin/${RTEMS_CC_PREFIX}-gcc)
++    set(CMAKE_CXX_COMPILER ${RTEMS_INSTALL_POINT}/bin/${RTEMS_CC_PREFIX}-g++)
++    set(BUILD_STATIC ON)
++    set(NOT_BUILD_SHARED ON)
++    set(CXXFLAGS "${CFLAGS} -fexceptions -fpermissive")
++    add_definitions("--pipe -DBOOST_SYSTEM_NO_DEPRECATED  -D__BSD_VISIBLE  -D__RTEMS__  -DBoost_USE_STATIC_LIBS  -DBOOST_THREAD_POSIX  -DNOT_BUILD_SHARED -DRUBY_EXTENSIONS_AVAILABLE=NO -B${RTEMS_BUILD}/${BSP}/lib/ -specs bsp_specs -qrtems ${IMPORT_CPPFLAGS}  ${DIR_CPPFLAGS}")
++    include_directories(${RTEMS_BUILD}/${BSP}/lib/include  ${RTEMS_BUILD}/include  ${RTEMS_BUILD}/${BSP}/lib/include/networking  ${RTEMS_BUILD}/${BSP}/lib/include/sys  ${INSTALL_PREFIX}/omniORB/include  ${INSTALL_PREFIX}/boost/include)
++
++    if ("${RTEMS_CC_PREFIX}" MATCHES "i?86-*")
++	add_definitions ("-D__i386__")
++    elseif("${RTEMS_CC_PREFIX}" MATCHES "sparc-*")
++	add_definitions ("-D__SPARC__")
++    endif()
++
++endif()
++
+ project(rtt_typelib)
+ 
+ include(FindPkgConfig)
+@@ -24,8 +54,15 @@ include_directories(${Typelib_INCLUDE_DI
+ link_directories(${Typelib_LIBRARY_DIRS})
+ add_definitions(${Typelib_CFLAGS})
+ 
++IF (BUILD_STATIC)
++add_library(rtt-typelib STATIC
++    TypelibMarshallerBase.cpp ${mqsupport_sources})
++ENDIF (BUILD_STATIC)
++
++IF (NOT NOT_BUILD_SHARED)
+ add_library(rtt-typelib SHARED
+     TypelibMarshallerBase.cpp ${mqsupport_sources})
++ENDIF (NOT NOT_BUILD_SHARED)
+ 
+ target_link_libraries(rtt-typelib
+     ${OrocosRTT_LIBRARIES}
+@@ -36,7 +73,9 @@ if (OrocosRTT_MQUEUE_FOUND)
+ endif()
+ 
+ install(TARGETS rtt-typelib
+-    LIBRARY DESTINATION lib)
++    LIBRARY DESTINATION lib
++    ARCHIVE DESTINATION lib)
++
+ install(FILES TypelibMarshallerBase.hpp TypelibMarshaller.hpp
+     TypelibMarshallerHandle.hpp
+     MQTypelibMarshaller.hpp OpaqueTypelibMarshaller.hpp

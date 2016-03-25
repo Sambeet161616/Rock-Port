@@ -1,0 +1,448 @@
+--- rock/tools/typelib/bindings/ruby/CMakeLists.txt	2011-10-15 13:22:03.000000000 +0200
++++ rock/tools/typelib/bindings/ruby/CMakeLists.txt	2011-10-16 15:20:31.349332819 +0200
+@@ -8,7 +8,7 @@ endif(RDOC_EXECUTABLE)
+ SET(SUPPORTED_DYNCALL_SYSTEMS Linux-i486 Linux-i586 Linux-i686 Linux-x86_64 Linux-ppc)
+ LIST(FIND SUPPORTED_DYNCALL_SYSTEMS ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR} SYSTEM_SUPPORTED)
+ 
+-SET(ENABLE_DYNCALL OFF)
++ SET(ENABLE_DYNCALL OFF)
+ IF(${SYSTEM_SUPPORTED} EQUAL -1)
+     MESSAGE(STATUS "${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR} is not (yet) supported by dyncall. dyncall support disabled")
+     SET(ENABLE_DYNCALL OFF)
+@@ -55,7 +55,8 @@ TARGET_LINK_LIBRARIES(typelib_ruby typeL
+ CONFIGURE_FILE(typelib_ruby.pc.in ${CMAKE_CURRENT_BINARY_DIR}/typelib_ruby.pc @ONLY)
+ 
+ INSTALL(TARGETS typelib_ruby
+-    LIBRARY DESTINATION ${RUBY_EXTENSIONS_INSTALL_DIR})
++    LIBRARY DESTINATION ${RUBY_EXTENSIONS_INSTALL_DIR}
++    ARCHIVE DESTINATION lib)
+ INSTALL(FILES ext/typelib_ruby.hh
+     DESTINATION ${RUBY_EXTENSIONS_INSTALL_DIR})
+ INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/typelib_ruby.pc DESTINATION lib/pkgconfig)
+--- rock/tools/typelib/cmake/rtems_toolchain.cmake	1970-01-01 01:00:00.000000000 +0100
++++ rock/tools/typelib/cmake/rtems_toolchain.cmake	2011-10-16 15:20:31.349332819 +0200
+@@ -0,0 +1,74 @@
++INCLUDE(CMakeForceCompiler)
++
++SET(INSTALL_PREFIX $ENV{INSTALL_PREFIX})
++SET(TARGET $ENV{TARGET})
++SET(BSP $ENV{BSP})
++
++SET(CMAKE_SYSTEM_NAME RTEMS)
++
++CMAKE_FORCE_C_COMPILER($ENV{TARGET}-gcc GNU)
++CMAKE_FORCE_CXX_COMPILER($ENV{TARGET}-g++ GNU)
++
++SET(__BSD_VISIBLE 1)
++
++add_definitions("-B${INSTALL_PREFIX}/rtems/${TARGET}/${BSP}/lib/ -specs bsp_specs -qrtems  -D__RTEMS__ -DBoost_USE_STATIC_LIBS -D__BSD_VISIBLE -DBOOST_SYSTEM_NO_DEPRECATED   -DBOOST_DISABLE_THREADS  -DRUBY_EXTENSIONS_AVAILABLE=NO")
++
++add_definitions ("-fpermissive -fexceptions")
++
++IF ("${TARGET}" MATCHES "i?86-*")
++       add_definitions ("-D__i386__ -Wl,-Ttext,0x00100000")
++ELSEIF ("${TARGET}" MATCHES "sparc-*")
++        add_definitions ("-D__SPARC__")
++ENDIF()
++
++SET(CMAKE_CROSSCOMPILING ON)
++
++SET(EIGEN2_INCLUDE_DIR $ENV{INSTALL_PREFIX}/eigen/include)
++
++SET(BOOST_ROOT $ENV{INSTALL_PREFIX}/boost/)
++SET(BOOST_INCLUDEDIR $ENV{INSTALL_PREFIX}boost/include)
++SET(BOOST_LIBRARYDIR $ENV{INSTALL_PREFIX}boost/lib)
++
++SET(Boost_USE_STATIC_LIBS ON)
++SET(Boost_ADDITIONAL_VERSIONS "1.44.0" "1.44")
++SET(Boost_COMPILER -rtems4.10)
++
++SET(OMNIORB_INCLUDEDIR  $ENV{INSTALL_PREFIX}/omniORB/include)
++
++include_directories(${BOOST_INCLUDEDIR} ${OMNIORB_INCLUDEDIR} ${EIGEN2_INCLUDE_DIR})
++
++SET(DCMAKE_SYSTEM_NAME RTEMS)
++
++SET(CMAKE_SHARED_LIBRARY_C_FLAGS "")              # -pic 
++SET(CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS "")       # -shared
++SET(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS "")         # +s, flag for exe link to use shared lib
++SET(CMAKE_SHARED_LIBRARY_RUNTIME_C_FLAG "")       # -rpath
++SET(CMAKE_SHARED_LIBRARY_RUNTIME_C_FLAG_SEP "")   # : or empty
++
++SET(CMAKE_LINK_LIBRARY_SUFFIX "")
++SET(CMAKE_STATIC_LIBRARY_PREFIX "lib")
++SET(CMAKE_STATIC_LIBRARY_SUFFIX ".a")
++SET(CMAKE_SHARED_LIBRARY_PREFIX "lib")          # lib
++SET(CMAKE_SHARED_LIBRARY_SUFFIX ".a")           # .a
++SET(CMAKE_EXECUTABLE_SUFFIX ".bin")             #
++SET(CMAKE_DL_LIBS "" )
++
++SET(CMAKE_FIND_LIBRARY_PREFIXES "lib")
++SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
++
++# RTEMS doesn't support shared libs
++SET_PROPERTY(GLOBAL PROPERTY TARGET_SUPPORTS_SHARED_LIBS FALSE)
++SET(CMAKE_CXX_LINK_SHARED_LIBRARY )
++SET(CMAKE_CXX_LINK_MODULE_LIBRARY )
++SET(CMAKE_C_LINK_SHARED_LIBRARY )
++SET(CMAKE_C_LINK_MODULE_LIBRARY )
++
++# set flags 
++message("-- Setting static RTEMS")
++SET(BUILD_STATIC ON)
++
++message("-- Not building shared")
++SET(NOT_BUILD_SHARED ON)
++
++#Include rtems directories and libraries
++include_directories (${INSTALL_PREFIX}/rtems/${TARGET}/${BSP}/lib/include ${INSTALL_PREFIX}/rtems/${TARGET}/include ${INSTALL_PREFIX}${TARGET}/${BSP}/lib/include/networking)
+--- rock/tools/typelib/cmake/RubyExtensions.cmake	2011-09-10 19:52:12.000000000 +0200
++++ rock/tools/typelib/cmake/RubyExtensions.cmake	2011-10-16 15:20:31.349332819 +0200
+@@ -43,8 +43,24 @@ ELSEIF(NOT RUBY_EXTENSIONS_AVAILABLE)
+         endif()
+ 
+ 	SET_SOURCE_FILES_PROPERTIES(${ARGN} PROPERTIES COMPILE_FLAGS "${RUBY_CFLAGS}")
+-	ADD_LIBRARY(${target} MODULE ${ARGN})
++	#ADD_LIBRARY(${target} MODULE ${ARGN})
++   #     target_link_libraries(${target} ${RUBY_LIBRARY})
++
++   ## Add library is changed to static/shared library because target_link_libraries.
++   ## By definition: "MODULE libraries are plugins that 
++   ##are not linked into other targets but may be loaded dynamically at
++   ##runtime using dlopen-like functionality
++  
++ 
++
++   IF (NOT NOT_BUILD_SHARED)
++	ADD_LIBRARY(${target} SHARED ${ARGN})
+         target_link_libraries(${target} ${RUBY_LIBRARY})
++   ENDIF()
++   IF (BUILD_STATIC)
++	ADD_LIBRARY(${target} STATIC ${ARGN})
++   ENDIF()
++
+ 	SET_TARGET_PROPERTIES(${target} PROPERTIES PREFIX "")
+     ENDMACRO(ADD_RUBY_EXTENSION)
+ ENDIF(NOT RUBY_INCLUDE_PATH)
+--- rock/tools/typelib/CMakeLists.txt	2011-09-10 19:52:12.000000000 +0200
++++ rock/tools/typelib/CMakeLists.txt	2011-10-18 16:33:25.190980215 +0200
+@@ -56,6 +56,7 @@ INCLUDE_DIRECTORIES(BEFORE ${CMAKE_SOURC
+ INCLUDE_DIRECTORIES(BEFORE ${CMAKE_BINARY_DIR})
+ 
+ INCLUDE(RubyExtensions)
++set (RUBY_EXTENSIONS_AVAILABLE NO)
+ IF(RUBY_EXTENSIONS_AVAILABLE)
+     ADD_SUBDIRECTORY(bindings/ruby)
+     ADD_SUBDIRECTORY(test/ruby)
+@@ -71,10 +72,10 @@ ELSE(NOT Boost_FOUND)
+ 	INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS})
+ ENDIF()
+ 
+-IF (Boost_UNIT_TEST_FRAMEWORK_FOUND)
+-    MESSAGE(STATUS "boost/test found ... building test suite")
+-    ADD_SUBDIRECTORY(test)
+-ENDIF(Boost_UNIT_TEST_FRAMEWORK_FOUND)
++#IF (Boost_UNIT_TEST_FRAMEWORK_FOUND)
++#    MESSAGE(STATUS "boost/test found ... building test suite")
++#    ADD_SUBDIRECTORY(test)
++#ENDIF(Boost_UNIT_TEST_FRAMEWORK_FOUND)
+ 
+ ADD_SUBDIRECTORY(lang/csupport)
+ OPTION(ENABLE_INTERNAL_CPARSER "set to ON to enable typelib's internal C/C++ parser. This is superseded by the gccxml support in the Ruby interface" OFF)
+--- rock/tools/typelib/lang/cimport/CMakeLists.txt	2011-09-10 19:52:12.000000000 +0200
++++ rock/tools/typelib/lang/cimport/CMakeLists.txt	2011-10-16 15:20:31.349332819 +0200
+@@ -3,10 +3,17 @@ FIND_PACKAGE(Antlr REQUIRED COMPONENTS C
+ ADD_ANTLR_GRAMMAR(cparser.g cparser_output)
+ 
+ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../csupport)
+-ADD_LIBRARY(typeLang_c SHARED import.cc Dictionary.cc Support.cc
++IF (BUILD_STATIC)
++   ADD_LIBRARY(typeLang_c STATIC import.cc Dictionary.cc Support.cc
+ 	    typesolver.cc packing.cc plugin.cc ${cparser_output})
++ENDIF (BUILD_STATIC)
++IF (NOT NOT_BUILD_SHARED)
++   ADD_LIBRARY(typeLang_c SHARED import.cc Dictionary.cc Support.cc
++	    typesolver.cc packing.cc plugin.cc ${cparser_output})
++ENDIF (NOT NOT_BUILD_SHARED)
+ TARGET_LINK_LIBRARIES(typeLang_c typeLang_cSupport typeLib ${Antlr_PIC_LIBRARIES} ${Utilmm_LIBRARIES} ${Boost_FILESYSTEM_LIBRARIES})
+ 
+ INSTALL(TARGETS typeLang_c
++    ARCHIVE DESTINATION lib/typelib
+     LIBRARY DESTINATION lib/typelib)
+     
+--- rock/tools/typelib/lang/csupport/CMakeLists.txt	2011-09-10 19:52:12.000000000 +0200
++++ rock/tools/typelib/lang/csupport/CMakeLists.txt	2011-10-16 15:20:31.349332819 +0200
+@@ -1,6 +1,13 @@
+-add_library(typeLang_cSupport SHARED containers.cc plugin.cc standard_types.cc)
++IF (BUILD_STATIC)
++   add_library(typeLang_cSupport STATIC containers.cc plugin.cc standard_types.cc)
++ENDIF (BUILD_STATIC)
++IF (NOT NOT_BUILD_SHARED)
++   add_library(typeLang_cSupport SHARED containers.cc plugin.cc standard_types.cc)
++ENDIF (NOT NOT_BUILD_SHARED)
++
+ target_link_libraries(typeLang_cSupport typeLib)
+ 
+ install(TARGETS typeLang_cSupport
++    ARCHIVE DESTINATION lib/typelib
+     LIBRARY DESTINATION lib/typelib)
+ 
+--- rock/tools/typelib/lang/idl/CMakeLists.txt	2011-09-10 19:52:12.000000000 +0200
++++ rock/tools/typelib/lang/idl/CMakeLists.txt	2011-10-16 15:20:31.349332819 +0200
+@@ -1,7 +1,13 @@
+-ADD_LIBRARY(typeLang_idl SHARED
+-    export.cc)
++IF (BUILD_STATIC)
++   ADD_LIBRARY(typeLang_idl STATIC
++       export.cc)
++ENDIF (BUILD_STATIC)
++IF (NOT NOT_BUILD_SHARED)
++   ADD_LIBRARY(typeLang_idl SHARED
++       export.cc)
++ENDIF (NOT NOT_BUILD_SHARED)
+ TARGET_LINK_LIBRARIES(typeLang_idl typeLib ${LibXML_LIBRARIES} ${Boost_SYSTEM_LIBRARIES})
+ 
+ INSTALL(TARGETS typeLang_idl
++    ARCHIVE DESTINATION lib/typelib
+     LIBRARY DESTINATION lib/typelib)
+-    
+--- rock/tools/typelib/lang/tlb/CMakeLists.txt	2011-09-10 19:52:12.000000000 +0200
++++ rock/tools/typelib/lang/tlb/CMakeLists.txt	2011-10-16 15:20:31.349332819 +0200
+@@ -1,10 +1,19 @@
+ INCLUDE_DIRECTORIES(${LibXML_INCLUDE_DIR}/libxml2)
+ LINK_DIRECTORIES(${LibXML_LINK_DIR})
+ 
+-ADD_LIBRARY(typeLang_tlb SHARED
++IF (BUILD_STATIC)
++  ADD_LIBRARY(typeLang_tlb STATIC
+     export.cc import.cc register.cc)
++ENDIF (BUILD_STATIC)
++
++IF (NOT NOT_BUILD_SHARED)
++  ADD_LIBRARY(typeLang_tlb SHARED
++    export.cc import.cc register.cc)
++ENDIF (NOT NOT_BUILD_SHARED)
++
+ TARGET_LINK_LIBRARIES(typeLang_tlb typeLib ${LibXML_LIBRARIES})
+ 
+ INSTALL(TARGETS typeLang_tlb
++    ARCHIVE DESTINATION lib/typelib
+     LIBRARY DESTINATION lib/typelib)
+  
+--- rock/tools/typelib/lang/tlb/import.cc	2011-09-10 19:52:12.000000000 +0200
++++ rock/tools/typelib/lang/tlb/import.cc	2011-10-19 18:06:03.698247300 +0200
+@@ -100,6 +100,9 @@ namespace
+ 
+                 TypeNode    type(it->second);
+                 m_map.erase(it);
++#ifdef RTEMS_DEBUG
++                std::cout<<type.name<<"\n";
++#endif
+ 
+                 base = type.loader(type, *this);
+             }
+--- rock/tools/typelib/lang/tlb/register.cc	2011-09-10 19:52:12.000000000 +0200
++++ rock/tools/typelib/lang/tlb/register.cc	2011-10-19 00:50:00.970063795 +0200
+@@ -2,5 +2,12 @@
+ #include "export.hh"
+ #include <typelib/plugins.hh>
+ 
+-TYPELIB_REGISTER_IO2(tlb, TlbExport, TlbImport)
+-
++#ifdef __RTEMS__
++   #include <typelib/registry.hh>
++   extern "C" void registerTlbPlugin(Typelib::PluginManager& manager){
++      manager.add(new Typelib::GenericIOPlugin<TlbExport>("tlb"));
++      manager.add(new Typelib::GenericIOPlugin<TlbImport>("tlb"));
++   }
++#else
++   TYPELIB_REGISTER_IO2(tlb, TlbExport, TlbImport)
++#endif
+--- rock/tools/typelib/typelib/CMakeLists.txt	2011-09-10 19:52:12.000000000 +0200
++++ rock/tools/typelib/typelib/CMakeLists.txt	2011-10-16 15:20:31.349332819 +0200
+@@ -1,8 +1,31 @@
++
++
++
++IF (NOT NOT_BUILD_SHARED)
+ ADD_LIBRARY(typeLib SHARED
+     registry.cc typebuilder.cc typemodel.cc typename.cc typevisitor.cc
+     typedisplay.cc exporter.cc pluginmanager.cc value.cc
+     importer.cc csvoutput.cc endianness.cc memory_layout.cc value_ops.cc)
+ 
++target_link_libraries(typeLib ${Utilmm_LIBRARIES} ${CMAKE_DL_LIBS} ${Boost_FILESYSTEM_LIBRARIES} ${Boost_SYSTEM_LIBRARIES})
++#TARGET_LINK_LIBRARIES(typeLib typeLang_c typeLang_tlb typeLang_idl)
++
++set_target_properties(typeLib
++    PROPERTIES LINK_INTERFACE_LIBRARIES ${Utilmm_LIBRARIES})
++ENDIF()
++
++IF (BUILD_STATIC)
++ADD_LIBRARY(typeLib STATIC 
++    registry.cc typebuilder.cc typemodel.cc typename.cc typevisitor.cc
++    typedisplay.cc exporter.cc pluginmanager.cc value.cc
++    importer.cc csvoutput.cc endianness.cc memory_layout.cc value_ops.cc)
++ENDIF()
++
++set_target_properties(typeLib PROPERTIES
++    VERSION ${PROJECT_VERSION}
++    SOVERSION ${API_VERSION}
++    INSTALL_NAME_DIR ${CMAKE_INSTALL_PREFIX}/lib)
++
+ if (NOT TYPELIB_PLUGIN_PATH)
+ set_source_files_properties(pluginmanager.cc PROPERTIES
+    COMPILE_FLAGS -DTYPELIB_PLUGIN_PATH="\\"${CMAKE_INSTALL_PREFIX}/lib/typelib\\"")
+@@ -14,16 +37,10 @@ endif (NOT TYPELIB_PLUGIN_PATH)
+ set_source_files_properties(endianness.cc PROPERTIES
+     COMPILE_FLAGS -fno-strict-aliasing)
+ 
+-target_link_libraries(typeLib ${Utilmm_LIBRARIES} ${CMAKE_DL_LIBS} ${Boost_FILESYSTEM_LIBRARIES} ${Boost_SYSTEM_LIBRARIES})
+-#TARGET_LINK_LIBRARIES(typeLib typeLang_c typeLang_tlb typeLang_idl)
+ 
+ install(TARGETS typeLib
+-    LIBRARY DESTINATION lib)
+-set_target_properties(typeLib PROPERTIES
+-    VERSION ${PROJECT_VERSION}
+-    SOVERSION ${API_VERSION})
+-set_target_properties(typeLib
+-    PROPERTIES LINK_INTERFACE_LIBRARIES ${Utilmm_LIBRARIES})
++    LIBRARY DESTINATION lib
++    ARCHIVE DESTINATION lib)
+ 
+ INSTALL(FILES exporter.hh importer.hh plugins.hh manip.hh pluginmanager.hh
+     registry.hh registryiterator.hh typebuilder.hh typedisplay.hh typemodel.hh
+--- rock/tools/typelib/typelib/exporter.hh	2011-09-10 19:52:12.000000000 +0200
++++ rock/tools/typelib/typelib/exporter.hh	2011-10-19 00:58:28.070027740 +0200
+@@ -42,10 +42,10 @@ namespace Typelib
+         virtual void end  (std::ostream& stream, Registry const& registry);
+ 
+     public:
+-        virtual ~Exporter() {}
++         ~Exporter() {}
+ 
+ 	/** Serialize a whole registry in a file */
+-	virtual void save
++	 void save
+ 	    ( std::string const& file_name
+ 	    , utilmm::config_set const& config
+ 	    , Registry const& registry );
+@@ -65,7 +65,7 @@ namespace Typelib
+          *          recursive types
+ 	 * @exception ExportError for all export errors
+ 	 */
+-        virtual void save
++        void save
+             ( std::ostream& stream
+ 	    , utilmm::config_set const& config
+             , Registry const& registry );
+@@ -75,7 +75,7 @@ namespace Typelib
+ 	 *
+ 	 * @return true if the export has succeeded, false otherwise
+ 	 */
+-        virtual bool save
++        bool save
+             ( std::ostream& stream
+             , Registry const& registry );
+ 
+--- rock/tools/typelib/typelib/importer.hh	2011-09-10 19:52:12.000000000 +0200
++++ rock/tools/typelib/typelib/importer.hh	2011-10-19 01:01:54.273400038 +0200
+@@ -48,7 +48,7 @@ namespace Typelib
+     class Importer
+     {
+     public:
+-        virtual ~Importer() {}
++         ~Importer() {}
+ 
+ 	/** Loads a registry from an input stream object 
+ 	 * @arg stream	    the input stream
+@@ -66,7 +66,7 @@ namespace Typelib
+ 	 * @arg config	    the import configuration. Allowed values are importer-dependent  
+ 	 * @arg registry    the registry to import into
+ 	 */
+-        virtual void load
++         void load
+             ( std::string const& path
+             , utilmm::config_set const& config
+             , Registry& registry);
+--- rock/tools/typelib/typelib/pluginmanager.cc	2011-09-10 19:52:12.000000000 +0200
++++ rock/tools/typelib/typelib/pluginmanager.cc	2011-10-19 16:53:47.023233517 +0200
+@@ -5,7 +5,11 @@
+ 
+ #include <boost/filesystem.hpp>
+ #include <boost/version.hpp>
+-#include <dlfcn.h>
++#ifndef __RTEMS__
++   #include <dlfcn.h>
++ #else
++   extern "C" void registerTlbPlugin(Typelib::PluginManager& manager);
++#endif
+ 
+ using namespace std;
+ using namespace Typelib;
+@@ -18,7 +22,7 @@ namespace
+     
+     template<typename Map, typename Object>
+     bool add_plugin(Map& plugin_map, Object* object)
+-    { return (plugin_map.insert( make_pair(object->getName(), object) ).second); }
++    {return (plugin_map.insert( make_pair(object->getName(), object) ).second); }
+ 
+     template<typename Object>
+     Object* get_plugin( map<string, Object*> const& plugin_map, string const& name)
+@@ -40,6 +44,7 @@ namespace
+ 
+ PluginManager::PluginManager()
+ {
++#ifndef __RTEMS__ 
+     // Load plugins from standard path
+     if (! exists(TYPELIB_PLUGIN_PATH))
+         return;
+@@ -55,6 +60,10 @@ PluginManager::PluginManager()
+             loadPlugin(it->path().file_string());
+ #endif
+     }
++#else
++    // Register plugin
++    registerTlbPlugin(*this);
++#endif
+ }
+ 
+ PluginManager::~PluginManager()
+@@ -69,8 +78,8 @@ PluginManager::~PluginManager()
+     //    dlclose(*it);
+ }
+ 
+-bool PluginManager::loadPlugin(std::string const& path)
+-{
++bool PluginManager::loadPlugin(std::string const& path){
++#ifndef __RTEMS__ 
+     void* libhandle = dlopen(path.c_str(), RTLD_LAZY);
+     if (!libhandle)
+     {
+@@ -88,6 +97,7 @@ bool PluginManager::loadPlugin(std::stri
+     PluginEntryPoint function = reinterpret_cast<PluginEntryPoint>(libentry);
+     function(*this);
+     m_library_handles.push_back(libhandle);
++#endif
+     return true;
+ }
+ 
+--- rock/tools/typelib/typelib/value_ops.cc	2011-09-10 19:52:12.000000000 +0200
++++ rock/tools/typelib/typelib/value_ops.cc	2011-10-16 15:20:31.349332819 +0200
+@@ -2,6 +2,7 @@
+ #include <string.h>
+ #include <boost/lexical_cast.hpp>
+ #include <iostream>
++#include <unistd.h>
+ #include "value_ops_details.hh"
+ #include <cstdio>
+ 
+--- rock/tools/typelib/typelib/value_ops.hh	2011-09-10 19:52:12.000000000 +0200
++++ rock/tools/typelib/typelib/value_ops.hh	2011-10-16 15:20:31.349332819 +0200
+@@ -4,6 +4,7 @@
+ #include <typelib/memory_layout.hh>
+ #include <typelib/value.hh>
+ #include <iosfwd>
++#include <stdio.h>
+ 
+ namespace Typelib
+ {

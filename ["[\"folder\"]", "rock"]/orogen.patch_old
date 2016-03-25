@@ -1,0 +1,1171 @@
+diff -rupN rock/tools/orogen/bin/orogen rock/tools/orogen/bin/orogen
+--- rock/tools/orogen/bin/orogen	2011-09-10 19:52:13.218614175 +0200
++++ rock/tools/orogen/bin/orogen	2011-09-12 19:24:22.818549208 +0200
+@@ -46,10 +46,10 @@ parser = OptionParser.new do |opt|
+         end
+     end
+ 
+-    opt.on("--target=TARGET", "set the orocos build target (gnulinux or xenomai)") do |target|
++    opt.on("--target=TARGET", "set the orocos build target (gnulinux, rtems or xenomai)") do |target|
+         target = target.to_s
+-        if target !~ /^(gnulinux|xenomai)$/
+-            STDERR.puts "unknown target '#{target}', possible values are gnulinux and xenomai"
++        if target !~ /^(gnulinux|xenomai|rtems)$/
++            STDERR.puts "unknown target '#{target}', possible values are gnulinux, rtems and xenomai"
+             exit 1
+         end
+ 
+#diff -rupN rock/tools/orogen/lib/orogen/base.rb rock/tools/orogen/lib/orogen/base.rb
+#--- rock/tools/orogen/lib/orogen/base.rb	2011-09-10 19:52:13.415611712 +0200
+#+++ rock/tools/orogen/lib/orogen/base.rb	2011-09-13 01:01:38.941026493 +0200
+#@@ -396,7 +396,8 @@ module Orocos
+# 
+#         def self.cmake_pkgconfig_require(depspec, context = 'core')
+#             depspec.inject([]) do |result, s|
+#-                result << "pkg_check_modules(#{s.var_name} REQUIRED #{s.pkg_name})"
+#+                #result << "pkg_check_modules(#{s.var_name} REQUIRED #{s.pkg_name})"
+#+                result << "find_library(#{s.var_name} #{s.pkg_name})"
+#                 if s.in_context?(context, 'include')
+#                     result << "include_directories(${#{s.var_name}_INCLUDE_DIRS})"
+#                     result << "add_definitions(${#{s.var_name}_CFLAGS_OTHER})"
+diff -rupN rock/tools/orogen/lib/orogen/gen/project.rb rock/tools/orogen/lib/orogen/gen/project.rb
+--- rock/tools/orogen/lib/orogen/gen/project.rb	2011-09-10 19:52:13.410611774 +0200
++++ rock/tools/orogen/lib/orogen/gen/project.rb	2011-09-12 19:18:28.642977011 +0200
+@@ -97,6 +97,8 @@ module Orocos
+             def linux?; orocos_target == 'gnulinux' end
+             # True if the orocos target is xenomai
+             def xenomai?; orocos_target == 'xenomai' end
++            # True if the orocos target is rtems
++            def rtems?; orocos_target == 'rtems' end
+ 
+             # :method: version
+             #
+diff -rupN rock/tools/orogen/lib/orogen/gen/static_deployment.rb rock/tools/orogen/lib/orogen/gen/static_deployment.rb
+--- rock/tools/orogen/lib/orogen/gen/static_deployment.rb	2011-09-10 19:52:13.412611750 +0200
++++ rock/tools/orogen/lib/orogen/gen/static_deployment.rb	2011-09-28 15:28:42.915270760 +0200
+@@ -466,6 +466,8 @@ thread_#{name}->setMaxOverrun(#{max_over
+             def linux?;     project.linux? end
+             # True if we are generating for Xenomai
+             def xenomai?;   project.xenomai? end
++            # True if the orocos target is rtems
++            def rtems?;   project.rtems? end
+ 
+             def initialize(project, name, &block)
+ 		@name		 = name
+@@ -591,6 +593,18 @@ thread_#{name}->setMaxOverrun(#{max_over
+                     STDERR.puts "WARN: the deployment #{name} will do nothing. Either generate with --transports=corba or use the 'browse' statement"
+                 end
+ 
++      # Install rtems #
++      if Generation.orocos_target == 'rtems'
++		   rtems_init = Generation.render_template 'rtems_init.cpp', binding
++   		Generation.save_automatic "rtems_init.cpp",  rtems_init 
++
++		   netcfg = Generation.render_template 'net_cfg.h', binding
++	   	Generation.save_automatic "net_cfg.h", netcfg 
++
++		   rtemscfg = Generation.render_template 'rtemscfg.h', binding
++	   	Generation.save_automatic "rtemscfg.h", rtemscfg 
++      end
++
+ 		main = Generation.render_template 'main.cpp', binding
+ 		Generation.save_automatic "main-#{name}.cpp", main
+                 pkg = if install?
+diff -rupN rock/tools/orogen/lib/orogen/gen/tasks.rb rock/tools/orogen/lib/orogen/gen/tasks.rb
+--- rock/tools/orogen/lib/orogen/gen/tasks.rb	2011-09-10 19:52:13.413611738 +0200
++++ rock/tools/orogen/lib/orogen/gen/tasks.rb	2011-09-28 10:40:52.676154717 +0200
+@@ -262,6 +262,8 @@ module Orocos
+             def linux?;     project.linux? end
+             # True if we are generating for Xenomai
+             def xenomai?;   project.xenomai? end
++            # True if the orocos target is rtems
++            def rtems?;   project.rtems? end
+ 
+             def class_name
+                 name
+diff -rupN rock/tools/orogen/lib/orogen/gen/typekit.rb rock/tools/orogen/lib/orogen/gen/typekit.rb
+--- rock/tools/orogen/lib/orogen/gen/typekit.rb	2011-09-10 19:52:13.409611786 +0200
++++ rock/tools/orogen/lib/orogen/gen/typekit.rb	2011-09-12 19:16:47.881236705 +0200
+@@ -780,6 +780,9 @@ module Orocos
+             def linux?; orocos_target == 'gnulinux' end
+             # True if the orocos target is xenomai
+             def xenomai?; orocos_target == 'xenomai' end
++            # True if the orocos target is rtems
++            def rtems?; orocos_target == 'rtems' end
++
+ 
+ 	    # Set of directories in which the header files that have been
+ 	    # loaded lie. It is used to generate the Cflags: line in the
+--- rock/tools/orogen/lib/orogen/templates/config/Base.cmake	2011-09-10 19:52:13.000000000 +0200
++++ rock/tools/orogen/lib/orogen/templates/config/Base.cmake	2011-10-13 11:38:11.883913001 +0200
+@@ -25,12 +25,14 @@ if (CXX_SUPPORTS_WALL)
+     add_definitions (" -Wall")
+ endif (CXX_SUPPORTS_WALL)
+ 
++if(NOT (${OROCOS_TARGET} STREQUAL "rtems"))
+ if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+     message(STATUS "running on Linux, implementing the __orogen_getTID() operation on all tasks")
+     add_definitions(-DHAS_GETTID)
+ else()
+     message(STATUS "NOT running on Linux (cmake reports ${CMAKE_SYSTEM_NAME}). The __orogen_getTID() operation will be a dummy")
+ endif()
++endif()
+ 
+ # Define the necessary RPath information for all binaries. That can be stripped
+ # later
+@@ -75,6 +77,11 @@ INCLUDE_DIRECTORIES(BEFORE "${CMAKE_SOUR
+ add_dependencies(check-uptodate check-typekit-uptodate)
+ <% end %>
+ 
++# Include rtems directory if necessary 
++<% if !project.rtems? %>
++ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/rtems)
++<% end %>
++
+ # Take care of the task library
+ <% if !component.self_tasks.empty? %>
+ ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/tasks)
+--- rock/tools/orogen/lib/orogen/templates/config/Deployment.cmake	2011-09-10 19:52:13.000000000 +0200
++++ rock/tools/orogen/lib/orogen/templates/config/Deployment.cmake	2011-10-13 20:00:25.207913002 +0200
+@@ -6,7 +6,12 @@ include_directories(${CMAKE_SOURCE_DIR}/
+ <% dependencies = deployer.dependencies %>
+ <%= Generation.cmake_pkgconfig_require(dependencies) %>
+ 
++<% if Generation.orocos_target == 'rtems' %>
++add_executable(<%= deployer.name %> ${CMAKE_SOURCE_DIR}/<%= Generation::AUTOMATIC_AREA_NAME %>/rtems_init.cpp ${CMAKE_SOURCE_DIR}/<%= Generation::AUTOMATIC_AREA_NAME %>/main-<%= deployer.name %>.cpp)
++<% else %>
+ add_executable(<%= deployer.name %> ${CMAKE_SOURCE_DIR}/<%= Generation::AUTOMATIC_AREA_NAME %>/main-<%= deployer.name %>.cpp)
++<% end %>
++
+ <% if component.typekit %>
+ target_link_libraries(<%= deployer.name %> <%= component.name %>-typekit-${OROCOS_TARGET})
+ <% deployer.transports.each do |transport_name| %>
+@@ -22,10 +27,21 @@ target_link_libraries(<%= deployer.name
+ <% if !component.self_tasks.empty? %>
+ target_link_libraries(<%= deployer.name %> <%= component.name %>-tasks-${OROCOS_TARGET})
+ <% end %>
++# TODO
++target_link_libraries(<%= deployer.name %> libomniDynamic4.a)
++
+ <%= Generation.cmake_pkgconfig_link_noncorba(deployer.name, dependencies) %>
+ <%= if deployer.corba_enabled?
+         Generation.cmake_pkgconfig_link_corba(deployer.name, dependencies)
+     end %>
++link_directories(${OrocosCORBA_LIBRARY_DIRS} ${OrocosRTT_LIBRARY_DIRS})
++target_link_libraries(<%= deployer.name %> libboost_filesystem.a)
++target_link_libraries(<%= deployer.name %> libboost_regex.a)
++target_link_libraries(<%= deployer.name %> libboost_serialization.a)
++target_link_libraries(<%= deployer.name %> libboost_system.a)
++target_link_libraries(<%= deployer.name %> libboost_thread.a)
++target_link_libraries(<%= deployer.name %> libboost_wserialization.a)
++target_link_libraries(<%= deployer.name %> ${OrocosRTT_LIBRARY_DIRS}/orocos/types/libbase-typekit-rtems.a)
+ 
+ <% if deployer.install? %>
+ install(TARGETS <%= deployer.name %>
+--- rock/tools/orogen/lib/orogen/templates/config/rtems_toolchain.cmake	1970-01-01 01:00:00.000000000 +0100
++++ rock/tools/orogen/lib/orogen/templates/config/rtems_toolchain.cmake	2011-10-13 19:43:05.131913002 +0200
+@@ -0,0 +1,85 @@
++INCLUDE(CMakeForceCompiler)
++
++SET(INSTALL_PREFIX $ENV{INSTALL_PREFIX})
++SET(TARGET $ENV{TARGET})
++SET(BSP $ENV{BSP})
++
++SET(CMAKE_SYSTEM_NAME RTEMS)
++
++CMAKE_FORCE_C_COMPILER($ENV{TARGET}-gcc GNU)
++CMAKE_FORCE_CXX_COMPILER($ENV{TARGET}-g++ GNU)
++
++SET(__BSD_VISIBLE 1)
++
++set(CFLAGS "-B${INSTALL_PREFIX}/rtems/${TARGET}/${BSP}/lib/ -specs bsp_specs -qrtems  -D__RTEMS__ -DBoost_USE_STATIC_LIBS -D__BSD_VISIBLE -DBOOST_SYSTEM_NO_DEPRECATED   -DBOOST_DISABLE_THREADS  -DRUBY_EXTENSIONS_AVAILABLE=NO")
++
++IF ("${TARGET}" MATCHES "i?86-*")
++       set (CFLAGS "-g -O2 -march=i486 -mtune=i486 -D__i386__ -Wl,-Ttext,0x00100000 ${CFLAGS}")
++ELSEIF ("${TARGET}" MATCHES "sparc-*")
++       set (CFLAGS "${CFLAGS} -D__SPARC__")
++ENDIF()
++
++SET (CXXFLAGS "${CFLAGS} -fpermissive -fexceptions")
++
++add_definitions(${CXXFLAGS})
++
++SET (CMAKE_C_FLAGS ${CFLAGS})
++SET (CMAKE_CXX_FLAGS ${CXXFLAGS})
++
++SET(CMAKE_CROSSCOMPILING ON)
++
++SET(BOOST_ROOT $ENV{INSTALL_PREFIX}/boost/)
++
++SET(BOOST_INCLUDEDIR $ENV{INSTALL_PREFIX}boost/include)
++SET(OMNIORB_INCLUDEDIR  $ENV{INSTALL_PREFIX}/omniORB/include)
++SET(EIGEN2_INCLUDE_DIR $ENV{INSTALL_PREFIX}/eigen/include)
++
++SET(BOOST_LIBRARYDIR $ENV{INSTALL_PREFIX}boost/lib)
++SET(OMNIORB_LIBRARYDIR  $ENV{INSTALL_PREFIX}/omniORB/lib)
++SET(EIGEN2_LIBRARYDIR $ENV{INSTALL_PREFIX}/eigen/lib)
++
++SET(BOOST_LIBRARYDIR $ENV{INSTALL_PREFIX}boost/lib)
++
++SET(Boost_USE_STATIC_LIBS ON)
++SET(Boost_ADDITIONAL_VERSIONS "1.44.0" "1.44")
++SET(Boost_COMPILER -rtems4.10)
++
++#TODO: Clean  link and include directories
++include_directories(${BOOST_INCLUDEDIR} ${OMNIORB_INCLUDEDIR} ${EIGEN2_INCLUDE_DIR})
++link_directories(${BOOST_LIBRARYDIR} ${OMNIORB_LIBRARYDIR} ${EIGEN2_LIBRARYDIR})
++
++SET(DCMAKE_SYSTEM_NAME RTEMS)
++
++SET(CMAKE_SHARED_LIBRARY_C_FLAGS "")              # -pic 
++SET(CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS "")       # -shared
++SET(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS "")         # +s, flag for exe link to use shared lib
++SET(CMAKE_SHARED_LIBRARY_RUNTIME_C_FLAG "")       # -rpath
++SET(CMAKE_SHARED_LIBRARY_RUNTIME_C_FLAG_SEP "")   # : or empty
++
++SET(CMAKE_LINK_LIBRARY_SUFFIX "")
++SET(CMAKE_STATIC_LIBRARY_PREFIX "lib")
++SET(CMAKE_STATIC_LIBRARY_SUFFIX ".a")
++SET(CMAKE_SHARED_LIBRARY_PREFIX "lib")          # lib
++SET(CMAKE_SHARED_LIBRARY_SUFFIX ".a")           # .a
++SET(CMAKE_EXECUTABLE_SUFFIX ".bin")             #
++SET(CMAKE_DL_LIBS "" )
++
++SET(CMAKE_FIND_LIBRARY_PREFIXES "lib")
++SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
++
++# RTEMS doesn't support shared libs
++SET_PROPERTY(GLOBAL PROPERTY TARGET_SUPPORTS_SHARED_LIBS FALSE)
++SET(CMAKE_CXX_LINK_SHARED_LIBRARY )
++SET(CMAKE_CXX_LINK_MODULE_LIBRARY )
++SET(CMAKE_C_LINK_SHARED_LIBRARY )
++SET(CMAKE_C_LINK_MODULE_LIBRARY )
++
++# set flags 
++message("-- Setting static RTEMS")
++SET(BUILD_STATIC ON)
++
++message("-- Not building shared")
++SET(NOT_BUILD_SHARED ON)
++
++#Include rtems directories and libraries
++include_directories (${INSTALL_PREFIX}/rtems/${TARGET}/${BSP}/lib/include ${INSTALL_PREFIX}/rtems/${TARGET}/include ${INSTALL_PREFIX}${TARGET}/${BSP}/lib/include/networking)
+--- rock/tools/orogen/lib/orogen/templates/main.cpp	2011-09-10 19:52:13.000000000 +0200
++++ rock/tools/orogen/lib/orogen/templates/main.cpp	2011-10-13 11:38:11.883913001 +0200
+@@ -185,7 +185,8 @@ int ORO_main(int argc, char* argv[])
+     sigint_handler.sa_handler = &sigint_quit_orb;
+     sigemptyset(&sigint_handler.sa_mask);
+     sigint_handler.sa_flags     = 0;
+-    sigint_handler.sa_restorer  = 0;
++    // The sa_restorer element is obsolete and should not be used. POSIX does not specify a sa_restorer element.
++    // sigint_handler.sa_restorer  = 0;
+     if (-1 == sigaction(SIGINT, &sigint_handler, 0))
+     {
+         std::cerr << "failed to install SIGINT handler" << std::endl;
+--- rock/tools/orogen/lib/orogen/templates/net_cfg.h	1970-01-01 01:00:00.000000000 +0100
++++ rock/tools/orogen/lib/orogen/templates/net_cfg.h	2011-10-13 11:38:11.883913001 +0200
+@@ -0,0 +1,277 @@
++#ifndef _RTEMS_NETWORKCONFIG_H_
++#define _RTEMS_NETWORKCONFIG_H_
++
++/* #define USE_LIBBSDPORT */
++
++#if defined(USE_LIBBSDPORT)
++  #include <bsp/libbsdport_api.h>
++  #define CONFIGURE_MAXIMUM_TIMERS 10
++#endif
++/*
++ * For TFTP test application
++ */
++#if (defined (RTEMS_USE_BOOTP))
++#define RTEMS_TFTP_TEST_HOST_NAME "BOOTP_HOST"
++#define RTEMS_TFTP_TEST_FILE_NAME "BOOTP_FILE"
++#else
++#define RTEMS_TFTP_TEST_HOST_NAME "XXX.YYY.ZZZ.XYZ"
++#define RTEMS_TFTP_TEST_FILE_NAME "tftptest"
++#endif
++
++/*
++ * For NFS test application
++ * 
++ * NFS mount and a directory to ls once mounted
++ */
++#define RTEMS_NFS_SERVER      "192.168.1.210"
++#define RTEMS_NFS_SERVER_PATH "/home"
++#define RTEMS_NFS_LS_PATH     "/mnt/nfstest"
++
++
++
++/*
++ * This file can be copied to an application source dirctory
++ * and modified to override the values shown below.
++ *
++ * The following CPP symbols may be passed from the Makefile:
++ *
++ *   symbol                   default       description
++ *
++ *   NETWORK_TASK_PRIORITY    150           can be read by app from public
++ *                                          var 'gesysNetworkTaskPriority'
++ *   FIXED_IP_ADDR            <undefined>   hardcoded IP address (e.g.,
++ *                                          "192.168.0.10"); disables BOOTP;
++ *                                          must also define FIXED_NETMASK
++ *   FIXED_NETMASK            <undefined>   IP netmask string
++ *                                          (e.g. "255.255.255.0")
++ *   LO_IF_ONLY               <undefined>   If defined, do NOT configure
++ *                                          any ethernet driver but only the
++ *                                          loopback interface.
++ *   MULTI_NETDRIVER          <undefined>   ugly hack; if defined try to probe
++ *                                          a variety of PCI and ISA drivers
++ *                                          (i386 ONLY) use is discouraged!
++ *   NIC_NAME                 <undefined>   Ethernet driver name (e.g. "pcn1");
++ *                                          must also define NIC_ATTACH
++ *   NIC_ATTACH               <undefined>   Ethernet driver attach function
++ *                                          (e.g., rtems_fxp_attach).
++ *                                          If these are undefined then
++ *                                            a) MULTI_NETDRIVER is used
++ *                                               (if defined)
++ *                                            b) RTEMS_BSP_NETWORK_DRIVER_NAME/
++ *                                               RTEMS_BSP_NETWORK_DRIVER_ATTACH
++ *                                               are tried
++ *   MEMORY_CUSTOM            <undefined>   Allocate the defined amount of
++ *                                          memory for mbufs and mbuf clusters,
++ *                                          respectively. Define to a comma ','
++ *                                          separated pair of two numerical
++ *                                          values, e.g: 100*1024,200*1024
++ *   MEMORY_SCARCE            <undefined>   Allocate few memory for mbufs
++ *                                          (hint for how much memory the
++ *                                          board has)
++ *   MEMORY_HUGE              <undefined>   Allocate a lot of memory for mbufs
++ *                                          (hint for how much memory the
++ *                                          board has)
++ *                                          If none of MEMORY_CUSTOM/
++ *                                          MEMORY_SCARCE/MEMORY_HUGE are
++ *                                          defined then a medium amount of
++ *                                          memory is allocated for mbufs.
++ */
++
++#include <rtems/bspIo.h>
++#include <bsp.h>
++#include <rtems/rtems_bsdnet.h>
++#include <rtems/pci.h>
++
++#define MULTI_NETDRIVER
++
++/* Assume we are on qemu unless forced to lab hardware */
++#if !defined(ON_RTEMS_LAB_WINSYSTEMS)
++#undef ON_QEMU
++#define ON_QEMU
++#endif
++
++#define FIXED_IP_ADDR "10.0.2.3"
++
++#if defined(ON_RTEMS_LAB_WINSYSTEMS)
++#define FIXED_IP_ADDR "192.168.1.249"
++#endif
++
++#define FIXED_NETMASK "255.0.0.0"
++
++#ifndef NETWORK_TASK_PRIORITY
++#define NETWORK_TASK_PRIORITY   150  /* within EPICS' range */
++#endif
++
++/* make publicily available for startup scripts... */
++const int gesysNetworkTaskPriority = NETWORK_TASK_PRIORITY;
++
++#ifdef  FIXED_IP_ADDR
++#define RTEMS_DO_BOOTP 0
++#else
++#define RTEMS_DO_BOOTP rtems_bsdnet_do_bootp
++#define FIXED_IP_ADDR  0
++#undef  FIXED_NETMASK
++#define FIXED_NETMASK  0
++#endif
++
++#ifdef LO_IF_ONLY
++#undef NIC_NAME
++#elif !defined(NIC_NAME)
++
++#ifdef MULTI_NETDRIVER
++
++extern int rtems_3c509_driver_attach (struct rtems_bsdnet_ifconfig *, int);
++extern int rtems_fxp_attach (struct rtems_bsdnet_ifconfig *, int);
++extern int rtems_elnk_driver_attach (struct rtems_bsdnet_ifconfig *, int);
++extern int rtems_dec21140_driver_attach (struct rtems_bsdnet_ifconfig *, int);
++
++#if defined(__x86__)
++/* these don't probe and will be used even if there's no device :-( */
++extern int rtems_ne_driver_attach (struct rtems_bsdnet_ifconfig *, int);
++extern int rtems_wd_driver_attach (struct rtems_bsdnet_ifconfig *, int);
++
++static struct rtems_bsdnet_ifconfig isa_netdriver_config[] = {
++  {
++  	//"ne1", rtems_ne_driver_attach, 0, irno: 9 /* qemu cannot configure irq-no :-(; has it hardwired to 9 */
++  	"ne1", rtems_ne_driver_attach, 0, 0,0,0,0,0,0,0,0, 9,0,0 /* qemu cannot configure irq-no :-(; has it hardwired to 9 */
++  },
++};
++#endif
++
++static const char *etc_hosts[] =
++{
++  "/etc/hosts",
++  "127.0.0.1     localhost\n",
++
++  /* IMPORTANT NOTE: *** CHANGE THIS TO MATCH YOUR ENVIRONMENT ****  */
++  /*
++   * replace this with the IP and HOSTANE of target used above.
++   */
++  "10.0.2.2  rtems\n",
++
++  /* name of the host where the omniNames runs */
++  "10.0.2.2   omniNames\n",
++  0
++};
++
++static int pci_check(struct rtems_bsdnet_ifconfig *ocfg, int attaching)
++{
++struct rtems_bsdnet_ifconfig *cfg;
++#if defined(__x86__)
++int if_index_pre;
++extern int if_index;
++  if ( attaching ) {
++  	cfg = isa_netdriver_config;
++  }
++  while ( cfg ) {
++  	printk("Probing '%s'", cfg->name);
++  	/* unfortunately, the return value is unreliable - some drivers report
++  	 * success even if they fail.
++  	 * Check if they chained an interface (ifnet) structure instead
++  	 */
++  	if_index_pre = if_index;
++  	cfg->attach(cfg, attaching);
++  	if ( if_index > if_index_pre ) {
++  		/* assume success */
++  		printk(" .. seemed to work\n");
++  		ocfg->name   = cfg->name;
++  		ocfg->attach = cfg->attach;
++  		return 0;
++  	}
++  	printk(" .. failed\n");
++  	cfg = cfg->next;
++  }
++#endif
++  return -1;
++}
++
++#define  HOST_OMNINAMES_HOST_NAME     "omniNames_host"
++#define  HOST_OMNINAMES_PORT_NUMBER   "6000"
++
++#define NIC_NAME   "dummy"
++#define NIC_ATTACH pci_check
++
++#else
++
++#if defined(RTEMS_BSP_NETWORK_DRIVER_NAME)  /* Use NIC provided by BSP */
++# define NIC_NAME   RTEMS_BSP_NETWORK_DRIVER_NAME
++# define NIC_ATTACH RTEMS_BSP_NETWORK_DRIVER_ATTACH
++#endif
++
++#endif /* ifdef MULTI_NETDRIVER */
++
++#endif /* ifdef LO_IF_ONLY */
++
++#ifdef NIC_NAME
++
++//extern int NIC_ATTACH();
++
++
++static struct rtems_bsdnet_ifconfig netdriver_config[1] = {{
++  NIC_NAME,  /* name */
++  (int (*)(struct rtems_bsdnet_ifconfig*,int))NIC_ATTACH,  /* attach function */
++  0,  		/* link to next interface */
++  FIXED_IP_ADDR,
++  FIXED_NETMASK
++}};
++#else
++#ifndef LO_IF_ONLY
++#warning "NO KNOWN NETWORK DRIVER FOR THIS BSP -- YOU MAY HAVE TO EDIT rtems_netconfig.c"
++#endif
++#endif
++
++extern void rtems_bsdnet_loopattach();
++static struct rtems_bsdnet_ifconfig loopback_config = {
++    "lo0",                          /* name */
++    (int (*)(struct rtems_bsdnet_ifconfig *, int))rtems_bsdnet_loopattach, /* attach function */
++#ifdef NIC_NAME
++    netdriver_config,               /* link to next interface */
++#else
++    0,                              /* link to next interface */
++#endif
++    "127.0.0.1",                    /* IP address */
++    "255.0.0.0",                    /* IP net mask */
++};
++
++struct rtems_bsdnet_config rtems_bsdnet_config = {
++    &loopback_config,         /* Network interface */
++#ifdef NIC_NAME
++    RTEMS_DO_BOOTP,           /* Use BOOTP to get network configuration */
++#else
++    0,                        /* Use BOOTP to get network configuration */
++#endif
++    NETWORK_TASK_PRIORITY,    /* Network task priority */
++#if   defined(MEMORY_CUSTOM)
++    MEMORY_CUSTOM,
++#elif defined(MEMORY_SCARCE)
++    100*1024,                 /* MBUF space */
++    200*1024,                 /* MBUF cluster space */
++#elif defined(MEMORY_HUGE)
++    2*1024*1024,              /* MBUF space */
++    5*1024*1024,              /* MBUF cluster space */
++#else
++    180*1024,                 /* MBUF space */
++    350*1024,                 /* MBUF cluster space */
++#endif
++#if (!defined (RTEMS_USE_BOOTP)) && defined(ON_RTEMS_LAB_WINSYSTEMS)
++    "rtems",                /* Host name */
++    "nodomain.com",         /* Domain name */
++    "192.168.1.14",         /* Gateway */
++    "192.168.1.1",          /* Log host */
++    {"192.168.1.1"  },      /* Name server(s) */
++    {"192.168.1.1"  },      /* NTP server(s) */
++#else
++    "10.0.2.2",               /* Host name */
++    "nodomain.com",         /* Domain name */
++    "10.0.2.2",             /* Gateway */
++    NULL,                   /* Log host */
++    { "localhost" },               /* Name server(s) */
++    { NULL },               /* NTP server(s) */
++#endif /* !RTEMS_USE_BOOTP */
++    0,                      /* efficiency */
++    0,                      /* udp TX buffer */
++    0,                      /* udp RX buffer */
++    0,                      /* tcp TX buffer */
++    0,                      /* tcp RX buffer */
++};
++#endif /* _RTEMS_NETWORKCONFIG_H_ */
+--- rock/tools/orogen/lib/orogen/templates/rtems_init.cpp	1970-01-01 01:00:00.000000000 +0100
++++ rock/tools/orogen/lib/orogen/templates/rtems_init.cpp	2011-10-13 18:58:38.095913001 +0200
+@@ -0,0 +1,318 @@
++#include <errno.h>
++#include <stdio.h>
++#include <string.h>
++#include <sys/stat.h>
++#include <sys/types.h>
++#include <fcntl.h>
++#include <unistd.h>
++#include <sys/socket.h>
++#include <netinet/in.h>
++#include <netdb.h>
++#include <arpa/inet.h>
++#include <stdlib.h>
++
++/* omniORB includes */
++#include <omnithread.h>
++#include <omniORB4/CORBA.h>
++#include <omniORB4/omniORB.h>
++
++
++//#define  CONFIGURE_INIT
++extern "C" {
++#include "rtemscfg.h"
++#include "net_cfg.h"
++}
++
++// Table of directories to make. Please list here
++// and file that you intend to use.
++// 
++
++static const char *directories[] =
++{
++  "/etc",
++  0
++};
++
++/*
++ * /etc/host.conf controls the resovler.
++ */
++
++static const char *etc_host_conf[] =
++{
++  "/etc/host.conf",
++  "hosts,bind\n",
++  0
++};
++
++// TODO
++static const char *etc_omniORB_conf[] =
++{
++  "/etc/omniORB.cfg",
++  "traceExceptions = 0\n",
++  "traceInvocations = 0\n",
++  "traceInvocationReturns = 0\n",
++  "traceThreadId = 0\n",
++  "traceTime = 0\n",
++  "dumpConfiguration = 0\n",
++  "maxGIOPVersion = 1.2\n",
++  "giopMaxMsgSize = 2097152  strictIIOP = 1\n",
++  "lcdMode = 0\n",
++  "tcAliasExpand = 0\n",
++  "useTypeCodeIndirections = 1\n",
++  "acceptMisalignedTcIndirections = 0\n",
++  "scanGranularity = 5\n",
++  "nativeCharCodeSet = ISO-8859-1\n",
++  "nativeWCharCodeSet = UTF-16\n",
++  "abortOnInternalError = 0\n",
++  "validateUTF8 = 0\n",
++  "clientCallTimeOutPeriod = 0\n",
++  "clientConnectTimeOutPeriod = 0\n",
++  "supportPerThreadTimeOut = 0\n",
++  "resetTimeOutOnRetries = 0\n",
++  "outConScanPeriod = 120\n",
++  "maxGIOPConnectionPerServer = 5\n",
++  "oneCallPerConnection = 1\n",
++  "maxInterleavedCallsPerConnection = 5\n",
++  "offerBiDirectionalGIOP = 0\n",
++  "diiThrowsSysExceptions = 0\n",
++  "verifyObjectExistsAndType = 1\n",
++  "giopTargetAddressMode = 0\n",
++  "immediateAddressSwitch = 0\n",
++  "bootstrapAgentPort = 900\n",
++  "serverCallTimeOutPeriod = 0\n",
++  "inConScanPeriod = 180\n",
++  "threadPerConnectionPolicy = 1\n",
++  "maxServerThreadPerConnection = 100\n",
++  "maxServerThreadPoolSize = 100\n",
++  "threadPerConnectionUpperLimit = 10000\n",
++  "threadPerConnectionLowerLimit = 9000\n",
++  "threadPoolWatchConnection = 1\n",
++  "connectionWatchPeriod = 50000\n",
++  "connectionWatchImmediate = 0\n",
++  "acceptBiDirectionalGIOP = 0\n",
++  "unixTransportDirectory = /tmp/omni-%u\n",
++  "unixTransportPermission = 0777\n",
++  "supportCurrent = 1\n",
++  "copyValuesInLocalCalls = 1\n",
++  "objectTableSize = 0\n",
++  "poaHoldRequestTimeout = 0\n",
++  "poaUniquePersistentSystemIds = 1\n",
++  "idleThreadTimeout = 10\n",
++  "supportBootstrapAgent = 0\n",
++  "InitRef = NameService=IOR:010000002b00000049444c3a6f6d672e6f72672f436f734e616d696e672f4e616d696e67436f6e746578744578743a312e300000010000000000000070000000010102000d0000003139322e3136382e312e31320000d3040b0000004e616d6553657276696365000300000000000000080000000100000000545441010000001c0000000100000001000100010000000100010509010100010000000901010003545441080000007d1c7f4e01002731\n",
++  0
++};
++
++
++/*
++ * Create enough files to support the networking stack.
++ */
++ 
++static int
++make_dirs (const char **dir_table)
++{
++  /*
++   * Create the directory.
++   */
++
++  while (*dir_table)
++  {
++    if (mkdir (*dir_table, 0755) < 0)
++    {
++      printf ("root fs, cannot make `%s' : %s\n", *dir_table, strerror (errno));
++      return -1;
++    }
++//    printf( "mkdir: %s\n",  *dir_table );
++    dir_table++;
++  }
++  return 0;
++}
++
++
++/*
++ * Create enough files to support the networking stack.
++ */
++
++static int open_and_write_file (const char **file_table)
++{
++  int    len;
++  FILE   *fp;
++
++  if( ( fp= fopen( *file_table  ,"wt" ) ) == NULL )
++  {
++      fprintf(stderr, "unable to open output file %s\n", *file_table );
++      return 0;
++  }
++  file_table++;
++  while( *file_table )
++  {
++    len = fwrite( *file_table , 1, strlen( *file_table ), fp );
++    if( len <= 0 )
++	 {
++      printf ("root fs, cannot write `%s' : %s\n", *file_table, strerror (errno));
++      return 0;
++    }
++    file_table++;
++  }
++  fclose( fp );
++  return 1;
++	return 0;
++}
++
++/*
++ * Create a root file system.
++ */
++
++int
++rtems_create_root_fs (void *bcfg)
++{
++  /*
++   * Create the directories.
++   */
++
++  if (make_dirs (directories) < 0)
++    return -1;
++
++   /*
++   * Create a `/etc/omniORB.conf' file.
++   */
++
++  if( open_and_write_file (etc_omniORB_conf) < 0)
++    return -1;
++
++  if( open_and_write_file (etc_host_conf) < 0)
++    return -1;
++
++  return 0;
++}
++
++
++
++/* this is the command line options to be passed to the ORB */
++
++// IMPORTANT: ** CHANGE THIS FOR YOUR TARGET **
++// The command line paramters here to be passed to the ORB is
++// specific of the setup that use to test. "rps1" is the name
++// of the machine where the naming service is running, and 
++// 6000 is the port number that I use to start omniNames.
++//
++char *cc_argv[] = 
++{
++	"main",              /* always the name of the program */
++// "-ORBtraceLevel",       /* trace level */
++//	"20"
++};
++
++int cc_argc = sizeof( cc_argv ) / sizeof( cc_argv[ 0 ]  );
++
++
++//
++// this is the user's entry point. It should match the "main()"
++// function in a regular C/C+prgram.
++//
++extern int main(int argc, char **argv);
++
++
++CORBA::Boolean rtems_transient_handler
++( 
++   void *cookie, 
++   CORBA::ULong retries, 
++   const CORBA::TRANSIENT & ex 
++)
++{
++   printf( "Trasient Handler called: %ld\n", retries );
++   return 1;
++}
++
++
++CORBA::Boolean rtems_COMM_FAILURE_handler
++( 
++   void *cookie, 
++   CORBA::ULong retries, 
++   const CORBA::COMM_FAILURE & ex 
++)
++{
++   printf( "COMM_FAILURE HANDLER called: %ld\n", retries );
++   return 1;
++}
++
++
++CORBA::Boolean rtems_SystemException_handler
++( 
++   void *cookie, 
++   CORBA::ULong retries, 
++   const CORBA::SystemException & ex 
++)
++{
++   printf( "SystemException HANDLER called: %ld\n", retries );
++   return 1;
++}
++
++
++static void installHandlers()
++{
++  printf( "Installing RTEMS exception handlers\n" );
++  omniORB::installTransientExceptionHandler( 0, rtems_transient_handler );  
++  omniORB::installCommFailureExceptionHandler( 0, rtems_COMM_FAILURE_handler );  
++  omniORB::installSystemExceptionHandler( 0, rtems_SystemException_handler );  
++}
++
++/////////////////////////////////////////////////////////////////////////////
++// DESCRIPTION: Init task for any omniORB/RTEMS application.
++/////////////////////////////////////////////////////////////////////////////
++void *POSIX_Init( void *argument )
++{
++//int main( int, char **, char **){
++
++#ifdef USE_REMOTE_GDB__
++  init_remote_gdb();
++  BREAKPOINT();
++#endif
++
++  setenv("OMNIORB_USEHOSTNAME_VAR","10.0.2.2",0);
++  //
++  // This call does some preliminary initalization of the file
++  // system, creating all necessary files used by the network
++  // TCP/IP stack, such as /etc/hosts, etc.
++  //
++  rtems_create_root_fs( 0 );
++
++  // RTEMS calls the global Ctor/Dtor in a context that is not
++  // a posix thread. Calls to functions such as pthread_self()
++  // returns NULL. So, for RTEMS let's make the thread 
++  // initialization here. This is Ok as long as the ORO_main()
++  // routine stays running for the life time of the application.
++  omni_thread::init_t omni_thread_init;
++
++  #if defined(__x86__)
++   /* Make all network initialization */
++   rtems_bsdnet_initialize_network();
++   rtems_bsdnet_show_inet_routes ();
++   printf( "Netowrk Initialization is complete.\n\n" );
++  #endif
++
++  pthread_attr_t attr;
++  size_t st = 0;
++  pthread_attr_init(&attr);
++  pthread_attr_getstacksize( &attr, &st );
++
++  st = _Thread_Executing->Start.Initial_stack.size;
++
++  printf( "Init Task Stack Size is: %d\n", st );
++
++  // Uncomment the following lines if you want disable the 
++  // connection management of omniORB. - See documentation
++  // omniORB::idleConnectionScanPeriod( omniORB::idleIncoming, 0 );
++  // omniORB::idleConnectionScanPeriod( omniORB::idleOutgoing, 0 );
++
++  // install the exception handlers for the omniORB run-time.
++  // Check documentation to see how they could be activated
++  // and which cases you should use them.
++
++  // installHandlers();
++
++  // Call omniORB example
++  main( cc_argc, cc_argv );
++  pthread_exit( NULL );
++  return NULL; /* just so the compiler thinks we returned something */
++}
+--- rock/tools/orogen/lib/orogen/templates/rtemscfg.h	1970-01-01 01:00:00.000000000 +0100
++++ rock/tools/orogen/lib/orogen/templates/rtemscfg.h	2011-10-13 11:38:11.887913002 +0200
+@@ -0,0 +1,75 @@
++#include <bsp.h>
++
++/* functions */
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/* This seetings overwrite the ones defined in confdefs.h */
++
++
++/*
++ * PC386 BSP, usually has a lot of memory ( an old PC ),
++ * and the number of resources here might be too high 
++ * for your needs.
++ */
++
++/* list of device drivers required */
++#define CONFIGURE_APPLICATION_NEEDS_CONSOLE_DRIVER
++#define CONFIGURE_APPLICATION_NEEDS_CLOCK_DRIVER
++/*
++#define CONFIGURE_APPLICATION_NEEDS_TIMER_DRIVER
++//#define CONFIGURE_APPLICATION_NEEDS_RTC_DRIVER
++*/
++
++/* let's use the IMFS as default */
++#define CONFIGURE_USE_IMFS_AS_BASE_FILESYSTEM
++
++/* sometimes bsp.h defines this, so let's not touch it */
++#ifndef CONFIGURE_NUMBER_OF_TERMIOS_PORTS
++#define CONFIGURE_NUMBER_OF_TERMIOS_PORTS             3
++#endif
++
++void *POSIX_Init( void *argument );
++
++#define CONFIGURE_TICKS_PER_TIMESLICE                 50
++
++#define CONFIGURE_APPLICATION_NEEDS_CLOCK_DRIVER
++#define CONFIGURE_APPLICATION_NEEDS_CONSOLE_DRIVER
++
++#define CONFIGURE_POSIX_INIT_THREAD_TABLE
++
++#define CONFIGURE_MAXIMUM_POSIX_MUTEXES \
++rtems_resource_unlimited( 5 )
++
++#define CONFIGURE_MAXIMUM_TASKS  \
++rtems_resource_unlimited( 5 )
++
++#define CONFIGURE_MAXIMUM_POSIX_THREADS \
++rtems_resource_unlimited( 5 )
++
++#define CONFIGURE_MAXIMUM_POSIX_CONDITION_VARIABLES \
++rtems_resource_unlimited( 5 )
++
++#define CONFIGURE_MAXIMUM_POSIX_BARRIERS \
++rtems_resource_unlimited( 5 )
++
++#define CONFIGURE_LIBIO_MAXIMUM_FILE_DESCRIPTORS \
++20
++
++#define CONFIGURE_MAXIMUM_POSIX_SEMAPHORES \
++20
++
++#define CONFIGURE_MP_MAXIMUM_GLOBAL_OBJECTS \
++rtems_resource_unlimited( 5 )
++
++#define CONFIGURE_MAXIMUM_POSIX_KEYS \
++rtems_resource_unlimited( 7 )
++
++#define CONFIGURE_INIT
++
++#include <rtems/confdefs.h>
++
++#ifdef __cplusplus
++}
++#endif
+--- rock/tools/orogen/lib/orogen/templates/tasks/CMakeLists.txt	2011-09-10 19:52:13.000000000 +0200
++++ rock/tools/orogen/lib/orogen/templates/tasks/CMakeLists.txt	2011-10-13 11:38:11.887913002 +0200
+@@ -1,8 +1,22 @@
+ # Generated from orogen/lib/orogen/templates/tasks/CMakeLists.txt
+ 
++if (NOT BUILD_STATIC)
++   if (NOT_BUILD_SHARED)
++      message(FATAL_ERROR "Select build shared (NOT_BUILD_SHARED=False), build static(BUILD_STATIC=True) or both")
++   endif (NOT_BUILD_SHARED)
++endif (NOT BUILD_STATIC)
++
+ include(<%= component.name %>TaskLib)
++IF (BUILD_STATIC)
++ADD_LIBRARY(${<%= component.name.upcase %>_TASKLIB_NAME} STATIC 
++    ${<%= component.name.upcase %>_TASKLIB_SOURCES})
++ENDIF (BUILD_STATIC)
++
++IF (NOT NOT_BUILD_SHARED)
+ ADD_LIBRARY(${<%= component.name.upcase %>_TASKLIB_NAME} SHARED 
+     ${<%= component.name.upcase %>_TASKLIB_SOURCES})
++ENDIF(NOT NOT_BUILD_SHARED)
++
+ <% if component.typekit %>
+ add_dependencies(${<%= component.name.upcase %>_TASKLIB_NAME}
+     regen-typekit)
+@@ -11,12 +25,14 @@ add_dependencies(${<%= component.name.up
+ TARGET_LINK_LIBRARIES(${<%= component.name.upcase %>_TASKLIB_NAME}
+     ${OrocosRTT_LIBRARIES}
+     ${<%= component.name.upcase %>_TASKLIB_DEPENDENT_LIBRARIES})
++
+ SET_TARGET_PROPERTIES(${<%= component.name.upcase %>_TASKLIB_NAME}
+     PROPERTIES LINK_INTERFACE_LIBRARIES "${<%= component.name.upcase %>_TASKLIB_INTERFACE_LIBRARIES}")
+ 
+ INSTALL(TARGETS ${<%= component.name.upcase %>_TASKLIB_NAME}
+     RUNTIME DESTINATION bin
+-    LIBRARY DESTINATION lib/orocos)
++    LIBRARY DESTINATION lib/orocos
++    ARCHIVE DESTINATION lib/orocos)
+ 
+ INSTALL(FILES ${<%= component.name.upcase %>_TASKLIB_HEADERS}
+     DESTINATION include/orocos/<%= component.name.downcase %>)
+--- rock/tools/orogen/lib/orogen/templates/typekit/CMakeLists.txt	2011-09-10 19:52:13.000000000 +0200
++++ rock/tools/orogen/lib/orogen/templates/typekit/CMakeLists.txt	2011-10-13 11:38:11.887913002 +0200
+@@ -50,6 +50,12 @@ ADD_CUSTOM_TARGET(regen
+ # END if typekit.standalone?
+ ##
+ 
++if (NOT BUILD_STATIC)
++   if (NOT_BUILD_SHARED)
++      message(FATAL_ERROR "Select build shared (NOT_BUILD_SHARED=False), build static(BUILD_STATIC=True) or both")
++   endif (NOT_BUILD_SHARED)
++endif (NOT BUILD_STATIC)
++
+ set(ROS_ROOT $ENV{ROS_ROOT})
+ if ( ROS_ROOT )
+     if ( NOT ROSBUILD_init_called )
+@@ -87,6 +93,20 @@ string(REPLACE ";" "\" \"" PKG_CFLAGS "\
+ 
+ # Generate the base typekit shared library
+ set(libname <%= typekit.name %>-typekit-${OROCOS_TARGET})
++
++IF (BUILD_STATIC)
++add_library(${libname} STATIC 
++    <%= relatives = []
++        implementation_files.each do |file| 
++	    relatives << typekit.cmake_relative_path(file)
++        end
++        relatives.sort.join("\n    ") %>
++    ${TYPEKIT_ADDITIONAL_SOURCES}
++    ${TOOLKIT_ADDITIONAL_SOURCES})
++
++endif (BUILD_STATIC)
++
++if (NOT NOT_BUILD_SHARED)
+ add_library(${libname} SHARED
+     <%= relatives = []
+         implementation_files.each do |file| 
+@@ -96,6 +116,8 @@ add_library(${libname} SHARED
+     ${TYPEKIT_ADDITIONAL_SOURCES}
+     ${TOOLKIT_ADDITIONAL_SOURCES})
+ 
++endif (NOT NOT_BUILD_SHARED)
++
+ <%= Generation.cmake_pkgconfig_link_noncorba('${libname}', typekit_deps) %>
+ target_link_libraries(${libname} ${OrocosRTT_LIBRARIES} ${TYPEKIT_ADDITIONAL_LIBRARIES} ${TOOLKIT_ADDITIONAL_LIBRARIES})
+ target_link_libraries(${libname} LINK_INTERFACE_LIBRARIES ${OrocosRTT_LIBRARIES})
+@@ -103,7 +125,9 @@ target_link_libraries(${libname} LINK_IN
+ set(PKG_CONFIG_FILE ${CMAKE_CURRENT_BINARY_DIR}/<%= typekit.name %>-typekit-${OROCOS_TARGET}.pc)
+ configure_file(<%= typekit.name %>-typekit.pc.in ${PKG_CONFIG_FILE} @ONLY)
+ 
+-install(TARGETS ${libname} LIBRARY DESTINATION lib/orocos/types)
++install(TARGETS ${libname} LIBRARY DESTINATION lib/orocos/types
++    ARCHIVE DESTINATION lib/orocos/types)
++
+ install(FILES
+     Types.hpp
+     <% if typekit.has_opaques_with_templates? %>
+--- rock/tools/orogen/lib/orogen/templates/typekit/corba/CMakeLists.txt	2011-09-10 19:52:13.000000000 +0200
++++ rock/tools/orogen/lib/orogen/templates/typekit/corba/CMakeLists.txt	2011-10-13 11:38:11.887913002 +0200
+@@ -1,5 +1,11 @@
+ # Generated from orogen/lib/orogen/templates/typekit/corba/CMakeLists.txt
+ 
++if (NOT BUILD_STATIC)
++   if (NOT_BUILD_SHARED)
++      message(FATAL_ERROR "Select build shared (NOT_BUILD_SHARED=False), build static(BUILD_STATIC=True) or both")
++   endif (NOT_BUILD_SHARED)
++endif (NOT BUILD_STATIC)
++
+ <% typekit_deps = typekit.plugin('corba').dependencies(typekit); %>
+ 
+ find_package(OrocosCORBA REQUIRED COMPONENTS Typekit)
+@@ -33,9 +39,19 @@ include_directories(${OrocosCORBA_Typeki
+ 
+ # Generate the CORBA transport
+ set(libname_corba <%= typekit.name %>-transport-corba-${OROCOS_TARGET})
++
++IF (BUILD_STATIC)
++add_library(${libname_corba} STATIC
++    <%= impl.join("\n    ") %>
++    ${CORBA_FILES})
++ENDIF(BUILD_STATIC)
++
++IF (NOT NOT_BUILD_SHARED)
+ add_library(${libname_corba} SHARED
+     <%= impl.join("\n    ") %>
+     ${CORBA_FILES})
++ENDIF (NOT NOT_BUILD_SHARED)
++
+ target_link_libraries(${libname_corba}
+     <%= typekit.name %>-typekit-${OROCOS_TARGET}
+     ${OrocosCORBA_LIBRARIES})
+@@ -46,7 +62,8 @@ target_link_libraries(${libname_corba} L
+ SET(PKG_CONFIG_FILE_CORBA ${CMAKE_CURRENT_BINARY_DIR}/<%= typekit.name %>-transport-corba-${OROCOS_TARGET}.pc)
+ CONFIGURE_FILE(<%= typekit.name %>-transport-corba.pc.in ${PKG_CONFIG_FILE_CORBA} @ONLY)
+ 
+-install(TARGETS ${libname_corba} LIBRARY DESTINATION lib/orocos/types)
++install(TARGETS ${libname_corba} LIBRARY DESTINATION lib/orocos/types
++    ARCHIVE DESTINATION lib/orocos/types)
+ install(FILES ${PKG_CONFIG_FILE_CORBA} DESTINATION lib/pkgconfig)
+ install(FILES
+     <%= headers.join("\n   ") %>
+--- rock/tools/orogen/lib/orogen/templates/typekit/mqueue/CMakeLists.txt	2011-09-10 19:52:13.000000000 +0200
++++ rock/tools/orogen/lib/orogen/templates/typekit/mqueue/CMakeLists.txt	2011-10-13 11:38:11.887913002 +0200
+@@ -1,5 +1,12 @@
+ # Generated from orogen/lib/orogen/templates/typekit/mqueue/CMakeLists.txt
+ 
++if (NOT BUILD_STATIC)
++   if (NOT_BUILD_SHARED)
++      message(FATAL_ERROR "Select build shared (NOT_BUILD_SHARED=False), build static(BUILD_STATIC=True) or both")
++   endif (NOT_BUILD_SHARED)
++endif (NOT BUILD_STATIC)
++
++
+ find_package(Orocos-RTT)
+ 
+ pkg_check_modules(RTT_Typelib REQUIRED rtt-typelib)
+@@ -15,9 +22,19 @@ set(MQueue_FILES "")
+ 
+ # Generate the MQueue transport
+ set(libname_mqueue <%= typekit.name %>-transport-mqueue-${OROCOS_TARGET})
++
++IF (BUILD_STATIC)
++add_library(${libname_mqueue} STATIC
++    <%= impl.join("\n    ") %>
++    ${MQueue_FILES})
++ENDIF (BUILD_STATIC)
++
++IF (NOT NOT_BUILD_SHARED)
+ add_library(${libname_mqueue} SHARED
+     <%= impl.join("\n    ") %>
+     ${MQueue_FILES})
++ENDIF (NOT NOT_BUILD_SHARED)
++
+ target_link_libraries(${libname_mqueue}
+     <%= typekit.name %>-typekit-${OROCOS_TARGET}
+     <%= typekit.name %>-transport-typelib-${OROCOS_TARGET}
+@@ -31,7 +48,9 @@ target_link_libraries(${libname_mqueue}
+ SET(PKG_CONFIG_FILE_MQueue ${CMAKE_CURRENT_BINARY_DIR}/<%= typekit.name %>-transport-mqueue-${OROCOS_TARGET}.pc)
+ CONFIGURE_FILE(<%= typekit.name %>-transport-mqueue.pc.in ${PKG_CONFIG_FILE_MQueue} @ONLY)
+ 
+-install(TARGETS ${libname_mqueue} LIBRARY DESTINATION lib/orocos/types)
++install(TARGETS ${libname_mqueue} LIBRARY DESTINATION lib/orocos/types 
++    ARCHIVE DESTINATION lib/orocos/types)
++
+ install(FILES ${PKG_CONFIG_FILE_MQueue} DESTINATION lib/pkgconfig)
+ install(FILES
+     <%= headers.join("\n   ") %>
+--- rock/tools/orogen/lib/orogen/templates/typekit/typelib/CMakeLists.txt	2011-09-10 19:52:13.000000000 +0200
++++ rock/tools/orogen/lib/orogen/templates/typekit/typelib/CMakeLists.txt	2011-10-13 11:38:11.887913002 +0200
+@@ -3,6 +3,13 @@
+ # This policy indicates that the code below is cmake 2.6 compliant. This is necessary
+ # To properly escape the add_definitions arguments.
+ cmake_policy(VERSION 2.6)
++
++if (NOT BUILD_STATIC)
++   if (NOT_BUILD_SHARED)
++      message(FATAL_ERROR "Select build shared (NOT_BUILD_SHARED=False), build static(BUILD_STATIC=True) or both")
++   endif (NOT_BUILD_SHARED)
++endif (NOT BUILD_STATIC)
++
+ pkg_check_modules(TYPELIB REQUIRED typelib)
+ include_directories(${TYPELIB_INCLUDE_DIRS})
+ link_directories(${TYPELIB_LIBRARY_DIRS})
+@@ -14,8 +21,16 @@ link_directories(${RTT_Typelib_LIBRARY_D
+ set(TYPEKIT_REGISTRY ${CMAKE_INSTALL_PREFIX}/share/orogen/<%= typekit.name %>.tlb)
+ add_definitions(-DTYPEKIT_REGISTRY="${TYPEKIT_REGISTRY}")
+ set(libname_typelib <%= typekit.name %>-transport-typelib-${OROCOS_TARGET})
++
++IF (BUILD_STATIC)
++add_library(${libname_typelib} STATIC
++    <%= impl.join("\n    ") %>)
++ENDIF (BUILD_STATIC)
++
++IF (NOT NOT_BUILD_SHARED)
+ add_library(${libname_typelib} SHARED
+     <%= impl.join("\n    ") %>)
++ENDIF (NOT NOT_BUILD_SHARED)
+ 
+ target_link_libraries(${libname_typelib}
+     ${TYPELIB_LIBRARIES}
+@@ -44,5 +59,6 @@ install(FILES ${PKG_CONFIG_FILE_TYPELIB}
+ install(FILES
+     TransportPlugin.hpp
+     DESTINATION include/orocos/<%= typekit.name %>/transports/typelib)
+-install(TARGETS ${libname_typelib} LIBRARY DESTINATION lib/orocos/types)
++install(TARGETS ${libname_typelib} LIBRARY DESTINATION lib/orocos/types
++    ARCHIVE DESTINATION lib/orocos/types)
+ 

@@ -1,0 +1,1460 @@
+--- rock/tools/rtt/CMakeLists.txt	2011-09-10 19:52:15.000000000 +0200
++++ rock/tools/rtt/CMakeLists.txt	2011-10-06 23:57:04.921107001 +0200
+@@ -13,6 +13,15 @@ ENDIF(COMMAND cmake_policy AND ${CMAKE_M
+ #       Start project customization section       #
+ #                                                 #
+ ###################################################
++#bug
++#http://www.orocos.org/forum/rtt/rtt-dev/bug-826-new-detection-orocostarget-environment-variable-fails
++SET( OROCOS_TARGET $ENV{OROCOS_TARGET}) 
++
++#Before create project to set cxx compiler
++set (CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/config")
++IF ( NOT CMAKE_BUILD_TYPE STREQUAL "rtems")
++  FIND_PACKAGE(RTEMS REQUIRED)
++ENDIF ( NOT CMAKE_BUILD_TYPE STREQUAL "rtems")
+ 
+ PROJECT(orocos-rtt)
+ 
+@@ -23,7 +32,6 @@ LIST( GET RTT_VERSIONS 1 RTT_VERSION_MIN
+ LIST( GET RTT_VERSIONS 2 RTT_VERSION_PATCH)
+ 
+ SET(ROS_ROOT $ENV{ROS_ROOT})
+-
+ MESSAGE( "Orocos RTT version ${VERSION} (${RTT_VERSION_MAJOR}.${RTT_VERSION_MINOR}.${RTT_VERSION_PATCH})" )
+ 
+ SET( PROJ_SOURCE_DIR ${orocos-rtt_SOURCE_DIR} )
+--- rock/tools/rtt/UseOROCOS-RTT.cmake	2011-09-10 19:52:15.000000000 +0200
++++ rock/tools/rtt/UseOROCOS-RTT.cmake	2011-10-07 00:15:58.933107001 +0200
+@@ -166,7 +166,9 @@ macro( orocos_component COMPONENT_NAME )
+     SET_TARGET_PROPERTIES( ${COMPONENT_NAME} PROPERTIES
+         LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib/orocos${OROCOS_SUFFIX}
+     )
+-  else()
++  elseif(BUILD_STATIC)
++    ADD_LIBRARY( ${COMPONENT_NAME} STATIC ${SOURCES} )
++  elseif(NOT NOT_BUILD_SHARED)
+     ADD_LIBRARY( ${COMPONENT_NAME} SHARED ${SOURCES} )
+   endif()
+ 
+@@ -230,7 +232,9 @@ macro( orocos_library LIB_TARGET_NAME )
+   MESSAGE( "[UseOrocos] Building library ${LIB_TARGET_NAME}" )
+   if (ROS_ROOT)
+     rosbuild_add_library(${LIB_TARGET_NAME} ${SOURCES} )
+-  else()
++  elseif(BUILD_STATIC)
++    ADD_LIBRARY( ${LIB_TARGET_NAME} STATIC ${SOURCES} )
++  elseif(NOT NOT_BUILD_SHARED)
+     ADD_LIBRARY( ${LIB_TARGET_NAME} SHARED ${SOURCES} )
+   endif()
+   if (COMPONENT_VERSION)
+@@ -375,7 +379,9 @@ macro( orocos_typekit LIB_TARGET_NAME )
+     SET_TARGET_PROPERTIES( ${LIB_TARGET_NAME} PROPERTIES
+         LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib/orocos${OROCOS_SUFFIX}/types
+     )
+-  else()
++  elseif(BUILD_STATIC)
++    ADD_LIBRARY( ${LIB_TARGET_NAME} STATIC ${SOURCES} )
++  elseif(NOT NOT_BUILD_SHARED)
+     ADD_LIBRARY( ${LIB_TARGET_NAME} SHARED ${SOURCES} )
+   endif()
+   SET_TARGET_PROPERTIES( ${LIB_TARGET_NAME} PROPERTIES
+@@ -440,7 +446,10 @@ macro( orocos_plugin LIB_TARGET_NAME )
+     SET_TARGET_PROPERTIES( ${LIB_TARGET_NAME} PROPERTIES
+         LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib/orocos${OROCOS_SUFFIX}/plugins
+     )
+-  else()
++  elseif(BUILD_STATIC)
++    MESSAGE( "[UseOrocos] Building plugin library ${LIB_TARGET_NAME}" )
++    ADD_LIBRARY( ${LIB_TARGET_NAME} STATIC ${SOURCES} )
++  elseif(NOT NOT_BUILD_SHARED)
+     MESSAGE( "[UseOrocos] Building plugin library ${LIB_TARGET_NAME}" )
+     ADD_LIBRARY( ${LIB_TARGET_NAME} SHARED ${SOURCES} )
+   endif()
+--- rock/tools/rtt/config/FindOmniORB.cmake	2011-09-10 19:52:16.000000000 +0200
++++ rock/tools/rtt/config/FindOmniORB.cmake	2011-10-06 18:09:46.709107001 +0200
+@@ -17,7 +17,7 @@
+ # compilation or because you installed it in an "unusual" directory).
+ # Just set OMNIORB4_DIR it to your specific installation directory
+ #
+-
++SET (OMNIORB4_DIR $ENV{OMNIORB4_DIR})
+ FIND_PATH( OMNIORB4_INCLUDE_DIR omniORB4/CORBA.h
+   PATHS
+   ${OMNIORB4_DIR}/include
+--- rock/tools/rtt/config/FindRTEMS.cmake	1970-01-01 01:00:00.000000000 +0100
++++ rock/tools/rtt/config/FindRTEMS.cmake	2011-10-07 00:05:27.701107000 +0200
+@@ -0,0 +1,49 @@
++set(RTEMS_INSTALL_DIR $ENV{RTEMS_INSTALL_DIR} CACHE PATH "path to rtems installation dir" FORCE)
++  set(RTEMS_CC_PREFIX $ENV{TARGET})
++  set(INSTALL_PREFIX $ENV{INSTALL_PREFIX})
++  set(BSP $ENV{BSP})
++
++  if(EXISTS ${RTEMS_INSTALL_DIR}/${RTEMS_CC_PREFIX}/${BSP}/lib/include/rtems/system.h)
++    message("-- Looking for RTEMS - found in ${RTEMS_INSTALL_DIR}")
++    set(RTEMS_FOUND TRUE)
++    set(RTEMS_INCLUDE_DIRS ${RTEMS_INSTALL_DIR}/${RTEMS_CC_PREFIX}/${BSP}/lib/include )
++    set(RTEMS_LIBRARIES -L${RTEMS_INSTALL_DIR}/${RTEMS_CC_PREFIX}/${BSP}/lib -lrtemsbsp -lrtemscpu -lc )
++
++    set(RTEMS_BUILD ${INSTALL_PREFIX}/rtems/${RTEMS_CC_PREFIX})
++    set(RTEMS_INSTALL_POINT ${INSTALL_PREFIX}/rtems)
++    set(RTEMS_INSTALL_DIR ${RTEMS_INSTALL_POINT})
++    set(PROJECT_RELEASE ${RTEMS_BUILD}/${BSP})
++    set(PROJECT_TOOLS ${RTEMS_BUILD}/${BSP}/build-tools)
++    set(CMAKE_C_COMPILER ${RTEMS_INSTALL_POINT}/bin/${RTEMS_CC_PREFIX}-gcc)
++    set(AS ${RTEMS_INSTALL_POINT}/bin/${RTEMS_CC_PREFIX}-as)
++    set(AR ${RTEMS_INSTALL_POINT}/bin/${RTEMS_CC_PREFIX}-ar)
++    set(NM ${RTEMS_INSTALL_POINT}/bin/${RTEMS_CC_PREFIX}-nm)
++    set(LD ${RTEMS_INSTALL_POINT}/bin/${RTEMS_CC_PREFIX}-ld)
++    set(SIZE ${RTEMS_INSTALL_POINT}/bin/${RTEMS_CC_PREFIX}-size)
++    set(OBJCOPY ${RTEMS_INSTALL_POINT}/bin/${RTEMS_CC_PREFIX}-objcopy)
++    set(RANLIB ${RTEMS_INSTALL_POINT}/bin/${RTEMS_CC_PREFIX}-ranlib)
++    set(CMAKE_CXX_COMPILER ${RTEMS_INSTALL_POINT}/bin/${RTEMS_CC_PREFIX}-g++)
++    set(CXXLINK ${RTEMS_INSTALL_POINT}/bin/${RTEMS_CC_PREFIX}-g++)
++    set(ARFLAGS "-ruv")
++    set(CDEFS "-D__RTEMS__")
++    set(BUILD_STATIC ON)
++    set(NOT_BUILD_SHARED ON)
++
++    set(CFLAGS "--pipe -DBOOST_SYSTEM_NO_DEPRECATED  -D__BSD_VISIBLE  -D__RTEMS__  -DBoost_USE_STATIC_LIBS  -DBOOST_THREAD_POSIX  -DNOT_BUILD_SHARED -DRUBY_EXTENSIONS_AVAILABLE=NO -B${RTEMS_BUILD}/${BSP}/lib/ -specs bsp_specs -qrtems ${IMPORT_CPPFLAGS}  ${DIR_CPPFLAGS} -I${RTEMS_BUILD}/${BSP}/lib/include  -I${RTEMS_BUILD}/include  -I${RTEMS_BUILD}/${BSP}/lib/include/networking  -I${RTEMS_BUILD}/${BSP}/lib/include/sys  -I${INSTALL_PREFIX}/omniORB/include  -I${INSTALL_PREFIX}/boost/include ")
++
++    if ("${RTEMS_CC_PREFIX}" MATCHES "i?86-*")
++	set (CFLAGS "${CFLAGS} -D__i386__ -march=i486  -Wl,-Ttext,0x00100000")
++    elseif("${RTEMS_CC_PREFIX}" MATCHES "sparc-*")
++	set (CFLAGS "${CFLAGS} -D__SPARC__")
++    endif()
++
++    set(CXXFLAGS "${CFLAGS} -fexceptions -fpermissive")
++
++    set(CMAKE_C_FLAGS ${CFLAGS})
++    set(CMAKE_CXX_FLAGS ${CXXFLAGS})
++
++  else(EXISTS ${RTEMS_INSTALL_DIR}/${RTEMS_CC_PREFIX}/${BSP}/lib/include/rtems/system.h)
++    message(FATAL_ERROR "-- Looking for RTEMS - not found (tried: ${RTEMS_INSTALL_DIR}/${RTEMS_CC_PREFIX}/${BSP}/lib/include/rtems/system.h)")
++    set(RTEMS_FOUND FALSE)
++  endif(EXISTS ${RTEMS_INSTALL_DIR}/${RTEMS_CC_PREFIX}/${BSP}/lib/include/rtems/system.h)
++
+--- rock/tools/rtt/config/check_depend.cmake	2011-09-10 19:52:16.000000000 +0200
++++ rock/tools/rtt/config/check_depend.cmake	2011-10-06 19:00:39.545106999 +0200
+@@ -86,6 +86,11 @@ OPTION(PLUGINS_STD_TYPES_SUPPORT "Enable
+ 
+ # Look for boost We look up all components in one place because this macro does
+ # not support multiple invocations in some CMake versions.
++if(OROCOS_TARGET STREQUAL "rtems")
++   set(Boost_USE_STATIC_LIBS   ON)
++   set(Boost_USE_MULTITHREADED ON)
++endif()
++
+ find_package(Boost 1.38 COMPONENTS filesystem system unit_test_framework thread serialization)
+ 
+ # Look for boost
+@@ -190,6 +195,31 @@ else()
+   set(OROPKG_OS_XENOMAI FALSE CACHE INTERNAL "" FORCE)
+ endif()
+ 
++# Setup flags for rtems 
++if(OROCOS_TARGET STREQUAL "rtems")
++  set(OROPKG_OS_RTEMS TRUE CACHE INTERNAL "This variable is exported to the rtt-config.h file to expose our target choice to the code." FORCE)
++  set(OS_HAS_TLSF FALSE)
++
++  find_package(RTEMS REQUIRED)
++
++  if(RTEMS_FOUND)
++
++    set(RTEMS_SUPPORT TRUE CACHE INTERNAL "" FORCE)
++
++    list(APPEND OROCOS-RTT_INCLUDE_DIRS ${RTEMS_INCLUDE_DIRS} )
++    list(APPEND OROCOS-RTT_LIBRARIES ${RTEMS_LIBRARIES} ${PTHREAD_LIBRARIES} ) 
++    list(APPEND OROCOS-RTT_DEFINITIONS "OROCOS_TARGET=${OROCOS_TARGET}") 
++    
++
++    message( "Turning BUILD_STATIC ON for rtems.")
++    set( FORCE_BUILD_STATIC ON CACHE INTERNAL "Forces to build Orocos RTT as a static library (forced to ON by Rtems)" FORCE)
++    set( BUILD_STATIC ON CACHE BOOL "Build Orocos RTT as a static library (forced to ON by Rtems)" FORCE)
++  endif()
++else()
++  set(OROPKG_OS_RTEMS FALSE CACHE INTERNAL "" FORCE)
++endif()
++
++
+ # Setup flags for GNU/Linux
+ if(OROCOS_TARGET STREQUAL "gnulinux")
+   set(OROPKG_OS_GNULINUX TRUE CACHE INTERNAL "This variable is exported to the rtt-config.h file to expose our target choice to the code." FORCE)
+@@ -292,7 +322,7 @@ else(OROCOS_TARGET STREQUAL "win32")
+ endif(OROCOS_TARGET STREQUAL "win32")
+ 
+ if( NOT OROCOS-RTT_DEFINITIONS )
+-  message(FATAL_ERROR "No suitable OROCOS_TARGET selected. Use one of 'lxrt,xenomai,gnulinux,macosx,win32'")
++  message(FATAL_ERROR "No suitable OROCOS_TARGET selected. Use one of 'lxrt,xenomai,gnulinux,macosx,win32,rtems'")
+ endif()
+ 
+ # The machine type is tested using compiler macros in rtt-config.h.in
+--- rock/tools/rtt/config/rtt_macros.cmake	2011-09-10 19:52:16.000000000 +0200
++++ rock/tools/rtt/config/rtt_macros.cmake	2011-10-07 19:43:53.097107000 +0200
+@@ -40,7 +40,18 @@ ENDMACRO( GLOBAL_ADD_SRC )
+ # The resulting filename is '${name}-${OROCOS_TARGET}[.dll|.so|...]'
+ #
+ macro(ADD_RTT_TYPEKIT name version)
+-  ADD_LIBRARY(${name}-${OROCOS_TARGET}_plugin SHARED ${ARGN})
++  IF ( BUILD_STATIC )
++      ADD_LIBRARY(${name}-${OROCOS_TARGET}_plugin STATIC ${ARGN})
++  ENDIF ( BUILD_STATIC )
++
++  IF (NOT NOT_BUILD_SHARED)
++  IF (UNIX AND NOT APPLE)
++    SET_TARGET_PROPERTIES( ${name}-${OROCOS_TARGET}_plugin PROPERTIES
++         LINK_FLAGS "-Wl,-zdefs")
++    ENDIF ()
++  ENDIF()
++
++  target_link_libraries(${name}-${OROCOS_TARGET}_plugin orocos-rtt-${OROCOS_TARGET}_dynamic)
+   SET_TARGET_PROPERTIES( ${name}-${OROCOS_TARGET}_plugin PROPERTIES
+     VERSION "${version}"
+     OUTPUT_NAME ${name}-${OROCOS_TARGET}
+@@ -49,17 +60,13 @@ macro(ADD_RTT_TYPEKIT name version)
+     INSTALL_RPATH_USE_LINK_PATH 1
+     INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib/orocos${OROCOS_SUFFIX};${CMAKE_INSTALL_PREFIX}/lib;${AC_INSTALL_DIR}"
+     CLEAN_DIRECT_OUTPUT 1)
+-  IF (UNIX AND NOT APPLE)
+-    SET_TARGET_PROPERTIES( ${name}-${OROCOS_TARGET}_plugin PROPERTIES
+-         LINK_FLAGS "-Wl,-zdefs")
+-  ENDIF ()
++  
+   if (DLL_EXPORT_PREFIX)
+     string(TOUPPER ${DLL_EXPORT_PREFIX} UDLL_EXPORT_PREFIX )
+     set(DEFINE_PREFIX "RTT_${UDLL_EXPORT_PREFIX}_DLL_EXPORT")
+     SET_TARGET_PROPERTIES( ${name}-${OROCOS_TARGET}_plugin PROPERTIES DEFINE_SYMBOL "${DEFINE_PREFIX}")
+   endif()
+ 
+-  target_link_libraries(${name}-${OROCOS_TARGET}_plugin orocos-rtt-${OROCOS_TARGET}_dynamic)
+ 
+   if(DLL_EXPORT_PREFIX)
+     configure_file( ${CMAKE_CURRENT_SOURCE_DIR}/rtt-${DLL_EXPORT_PREFIX}-config.h.in ${CMAKE_CURRENT_BINARY_DIR}/rtt-${DLL_EXPORT_PREFIX}-config.h @ONLY)
+@@ -108,31 +115,37 @@ endmacro(ADD_RTT_TYPEKIT name)
+ # The resulting filename is '${name}-${OROCOS_TARGET}[.dll|.so|...]'
+ #
+ macro(ADD_RTT_PLUGIN name version)
+-  ADD_LIBRARY(${name}-${OROCOS_TARGET}_plugin SHARED ${ARGN})
+-  SET_TARGET_PROPERTIES( ${name}-${OROCOS_TARGET}_plugin PROPERTIES
+-    VERSION "${version}"
+-    OUTPUT_NAME ${name}-${OROCOS_TARGET}
+-    COMPILE_DEFINITIONS "${RTT_DEFINITIONS}"
+-    COMPILE_FLAGS "${CMAKE_CXX_FLAGS_ADD}"
+-    INSTALL_RPATH_USE_LINK_PATH 1
+-    INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib/orocos${OROCOS_SUFFIX}/types;${CMAKE_INSTALL_PREFIX}/lib;${AC_INSTALL_DIR}"
+-
+-    CLEAN_DIRECT_OUTPUT 1)
+-  IF (UNIX AND NOT APPLE)
+-    SET_TARGET_PROPERTIES( ${name}-${OROCOS_TARGET}_plugin PROPERTIES
+-         LINK_FLAGS "-Wl,-zdefs")
+-  ENDIF ()
+-
+-  if (DLL_EXPORT_PREFIX)
+-    string(TOUPPER ${DLL_EXPORT_PREFIX} UDLL_EXPORT_PREFIX )
+-    set(DEFINE_PREFIX "RTT_${UDLL_EXPORT_PREFIX}_DLL_EXPORT")
+-    SET_TARGET_PROPERTIES( ${name}-${OROCOS_TARGET}_plugin PROPERTIES DEFINE_SYMBOL "${DEFINE_PREFIX}")
+-  endif()
++  IF ( BUILD_STATIC )
++      ADD_LIBRARY(${name}-${OROCOS_TARGET}_plugin STATIC ${ARGN})
++      target_link_libraries(${name}-${OROCOS_TARGET}_plugin orocos-rtt-${OROCOS_TARGET}_static)
++  ENDIF(BUILD_STATIC)
++
++  IF (NOT NOT_BUILD_SHARED)
++      ADD_LIBRARY(${name}-${OROCOS_TARGET}_plugin SHARED ${ARGN})
++      IF (UNIX AND NOT APPLE)
++        SET_TARGET_PROPERTIES( ${name}-${OROCOS_TARGET}_plugin PROPERTIES
++             LINK_FLAGS "-Wl,-zdefs")
++      ENDIF ()
++      target_link_libraries(${name}-${OROCOS_TARGET}_plugin orocos-rtt-${OROCOS_TARGET}_dynamic)
++   ENDIF(NOT NOT_BUILD_SHARED)
++
++      SET_TARGET_PROPERTIES( ${name}-${OROCOS_TARGET}_plugin PROPERTIES
++        VERSION "${version}"
++        OUTPUT_NAME ${name}-${OROCOS_TARGET}
++        COMPILE_DEFINITIONS "${RTT_DEFINITIONS}"
++        COMPILE_FLAGS "${CMAKE_CXX_FLAGS_ADD}"
++        INSTALL_RPATH_USE_LINK_PATH 1
++        INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib/orocos${OROCOS_SUFFIX}/types;${CMAKE_INSTALL_PREFIX}/lib;${AC_INSTALL_DIR}"
++
++        CLEAN_DIRECT_OUTPUT 1)
++      if (DLL_EXPORT_PREFIX)
++        string(TOUPPER ${DLL_EXPORT_PREFIX} UDLL_EXPORT_PREFIX )
++        set(DEFINE_PREFIX "RTT_${UDLL_EXPORT_PREFIX}_DLL_EXPORT")
++        SET_TARGET_PROPERTIES( ${name}-${OROCOS_TARGET}_plugin PROPERTIES DEFINE_SYMBOL "${DEFINE_PREFIX}")
++      endif()
+ 
+-  target_link_libraries(${name}-${OROCOS_TARGET}_plugin orocos-rtt-${OROCOS_TARGET}_dynamic)
+-  
+-  if(DLL_EXPORT_PREFIX)
+-    configure_file( ${CMAKE_CURRENT_SOURCE_DIR}/rtt-${DLL_EXPORT_PREFIX}-config.h.in ${CMAKE_CURRENT_BINARY_DIR}/rtt-${DLL_EXPORT_PREFIX}-config.h @ONLY)
++      if(DLL_EXPORT_PREFIX)
++        configure_file( ${CMAKE_CURRENT_SOURCE_DIR}/rtt-${DLL_EXPORT_PREFIX}-config.h.in ${CMAKE_CURRENT_BINARY_DIR}/rtt-${DLL_EXPORT_PREFIX}-config.h @ONLY)
+   endif()
+ 
+   # Note: plugins do get the symlinks
+--- rock/tools/rtt/orocos-rtt.default.cmake	2011-09-10 19:52:16.000000000 +0200
++++ rock/tools/rtt/orocos-rtt.default.cmake	2011-10-07 00:19:18.509107001 +0200
+@@ -51,11 +51,11 @@ endif()
+ # set(FORCE_BUILD_STATIC ON)
+ 
+ #
+-# Set the target operating system. One of [lxrt gnulinux xenomai macosx win32]
++# Set the target operating system. One of [lxrt gnulinux xenomai macosx win32 rtems]
+ # You may leave this as-is or force a certain target by removing the if... logic.
+ #
+ if(NOT DEFINED OROCOS_TARGET)
+-  set(DOC_STRING "The Operating System target. One of [gnulinux lxrt macosx win32 xenomai]")
++  set(DOC_STRING "The Operating System target. One of [gnulinux lxrt macosx win32 xenomai rtems]")
+   if (ENV{OROCOS_TARGET})
+     set(OROCOS_TARGET $ENV{OROCOS_TARGET} CACHE STRING "${DOC_STRING}")
+     message( "Detected OROCOS_TARGET environment variable. Using: ${OROCOS_TARGET}")
+--- rock/tools/rtt/rtt/CMakeLists.txt	2011-09-10 19:52:16.000000000 +0200
++++ rock/tools/rtt/rtt/CMakeLists.txt	2011-10-07 00:18:11.481107000 +0200
+@@ -189,8 +189,9 @@ IF ( BUILD_STATIC )
+   COMPILE_DEFINITIONS OROCOS_TARGET=${OROCOS_TARGET}
+   VERSION "${RTT_VERSION}"
+   CLEAN_DIRECT_OUTPUT 1)
+-ENDIF ( BUILD_STATIC )
+ 
++ENDIF(BUILD_STATIC)
++IF(NOT NOT_BUILD_SHARED)
+   ADD_LIBRARY(orocos-rtt-${OROCOS_TARGET}_dynamic SHARED $ENV{GLOBAL_LIBRARY_SRCS})
+   SET_TARGET_PROPERTIES( orocos-rtt-${OROCOS_TARGET}_dynamic PROPERTIES
+   DEFINE_SYMBOL "RTT_DLL_EXPORT"
+@@ -212,6 +213,7 @@ ENDIF ( BUILD_STATIC )
+   IF (BUILD_ENABLE_COVERAGE)
+ 	target_link_libraries(orocos-rtt-${OROCOS_TARGET}_dynamic gcov)
+   ENDIF (BUILD_ENABLE_COVERAGE)
++ENDIF(NOT NOT_BUILD_SHARED)
+ 
+ create_pc_flags( "${OROCOS-RTT_DEFINITIONS}" "${OROCOS-RTT_INCLUDE_DIRS}" "${OROCOS-RTT_LIBRARIES}" RTT_DEFINES RTT_CFLAGS RTT_LINKFLAGS)
+ create_pc_flags( "${RTT_DUMMY}" "${RTT_DUMMY}" "${OROCOS-RTT_USER_LINK_LIBS}" RTT_DUMMY RTT_DUMMY RTT_USER_LINK_LIBS)
+@@ -223,14 +225,16 @@ CONFIGURE_FILE( ${PROJ_SOURCE_DIR}/rtt/o
+ CONFIGURE_FILE( ${PROJ_SOURCE_DIR}/rtt/orocos-rtt.pc.in ${PROJ_BINARY_DIR}/rtt/orocos-rtt-${OROCOS_TARGET}.pc @ONLY)
+ 
+ INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/orocos-rtt-${OROCOS_TARGET}.pc DESTINATION  lib/pkgconfig )
+-INSTALL(TARGETS             orocos-rtt-${OROCOS_TARGET}_dynamic
+-        EXPORT              ${LIBRARY_EXPORT_FILE}
+-        LIBRARY DESTINATION lib
+-		ARCHIVE DESTINATION lib
+-        RUNTIME DESTINATION bin )
+ IF(BUILD_STATIC)
+   INSTALL(TARGETS             orocos-rtt-${OROCOS_TARGET}_static
+           EXPORT              ${LIBRARY_EXPORT_FILE}
+           ARCHIVE DESTINATION lib )
+ ENDIF(BUILD_STATIC)
++IF(NOT NOT_BUILD_SHARED)
++   INSTALL(TARGETS             orocos-rtt-${OROCOS_TARGET}_dynamic
++        EXPORT              ${LIBRARY_EXPORT_FILE}
++        LIBRARY DESTINATION lib
++		ARCHIVE DESTINATION lib
++        RUNTIME DESTINATION bin )
++ENDIF(NOT NOT_BUILD_SHARED)
+ 
+--- rock/tools/rtt/rtt/os/CMakeLists.txt	2011-09-10 19:52:16.000000000 +0200
++++ rock/tools/rtt/rtt/os/CMakeLists.txt	2011-10-06 18:09:46.713107001 +0200
+@@ -8,6 +8,7 @@ GLOBAL_ADD_SRC( ${CPPS})
+ ADD_SUBDIRECTORY( gnulinux )
+ ADD_SUBDIRECTORY( lxrt )
+ ADD_SUBDIRECTORY( xenomai )
++ADD_SUBDIRECTORY( rtems )
+ ADD_SUBDIRECTORY( ecos )
+ ADD_SUBDIRECTORY( macosx )
+ ADD_SUBDIRECTORY( win32 )
+@@ -19,6 +20,7 @@ ADD_SUBDIRECTORY( oro_powerpc )
+ ADD_SUBDIRECTORY( oro_msvc )
+ ADD_SUBDIRECTORY( oro_noasm )
+ ADD_SUBDIRECTORY( oro_gcc )
++ADD_SUBDIRECTORY( oro_sparc )
+ 
+ # Target specific config files
+ ADD_SUBDIRECTORY( targets )
+--- rock/tools/rtt/rtt/os/fosi.h	2011-09-10 19:52:16.000000000 +0200
++++ rock/tools/rtt/rtt/os/fosi.h	2011-10-06 18:09:46.713107001 +0200
+@@ -51,6 +51,10 @@
+  #include "xenomai/fosi.h"
+ #endif
+ 
++#ifdef OROPKG_OS_RTEMS
++ #include "rtems/fosi.h"
++#endif
++
+ #ifdef OROPKG_OS_ECOS
+  #include "ecos/fosi.h"
+ #endif
+--- rock/tools/rtt/rtt/os/oro_arch.h	2011-09-10 19:52:16.000000000 +0200
++++ rock/tools/rtt/rtt/os/oro_arch.h	2011-10-06 18:09:46.717107001 +0200
+@@ -4,7 +4,9 @@
+ #  include "oro_noasm/oro_arch.h"
+ # else
+ #  if defined(_MSC_VER)
+ #   include "oro_msvc/oro_arch.h"
++#  elif defined( OROBLD_OS_ARCH_sparc )
++#    include "oro_sparc/oro_arch.h"
+ #  elif defined(__GNUC__)
+ #    if ( OROBLD_GCC_VERSION < 40100 )
+ #      if defined( OROBLD_OS_ARCH_i386 )
+--- rock/tools/rtt/rtt/os/rtems/CMakeLists.txt	1970-01-01 01:00:00.000000000 +0100
++++ rock/tools/rtt/rtt/os/rtems/CMakeLists.txt	2011-10-06 18:09:46.713107001 +0200
+@@ -0,0 +1,7 @@
++IF (OROCOS_TARGET STREQUAL "rtems")
++  FILE( GLOB CPPS [^.]*.cpp [^.]*.c)
++  FILE( GLOB HPPS [^.]*.hpp [^.]*.h [^.]*.inl)
++
++  GLOBAL_ADD_INCLUDE( rtt/os/rtems ${HPPS})
++  GLOBAL_ADD_SRC( ${CPPS})
++ENDIF (OROCOS_TARGET STREQUAL "rtems")
+--- rock/tools/rtt/rtt/os/rtems/fosi.c	1970-01-01 01:00:00.000000000 +0100
++++ rock/tools/rtt/rtt/os/rtems/fosi.c	2011-10-07 00:02:28.317107000 +0200
+@@ -0,0 +1 @@
++#include "fosi.h"
+--- rock/tools/rtt/rtt/os/rtems/fosi.h	1970-01-01 01:00:00.000000000 +0100
++++ rock/tools/rtt/rtt/os/rtems/fosi.h	2011-10-07 00:03:00.589107000 +0200
+@@ -0,0 +1,259 @@
++#ifndef __FOSI_H
++#define __FOSI_H
++
++#define HAVE_FOSI_API
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#ifndef _XOPEN_SOURCE
++#define _XOPEN_SOURCE 600   // use all Posix features.
++#endif
++
++#include <stdio.h>
++#include <semaphore.h>
++#include <pthread.h>
++#include <errno.h>
++#include <string.h>
++#include <limits.h>
++#include <float.h>
++#include <assert.h>
++#include "../oro_limits.h"
++
++    // Time Related
++#include <sys/time.h>
++#include <time.h>
++#include <unistd.h>
++
++
++    typedef long long NANO_TIME;
++    typedef long long TICK_TIME;
++    typedef struct timespec TIME_SPEC;
++
++
++    static const TICK_TIME InfiniteTicks = LLONG_MAX;
++    static const NANO_TIME InfiniteNSecs = LLONG_MAX;
++    static const double    InfiniteSeconds = DBL_MAX;
++
++#define ORO_WAIT_ABS 0 /** rtos_task_wait_period may wait less than the duration required to pad the period to 
++                            catch-up with overrun timesteps (wait according to an absolute timeline) */
++#define ORO_WAIT_REL 1 /** rtos_task_wait_period will always pad the current timestep to the desired period, 
++                            regardless of previous overruns (wait according to a relative timeline) */
++
++  typedef struct {
++    pthread_t thread;
++    pthread_attr_t attr;
++
++    TIME_SPEC periodMark;
++    NANO_TIME period;
++
++    char* name;
++
++    int priority;
++    int wait_policy;
++  } RTOS_TASK;
++
++
++#define ORO_SCHED_RT    SCHED_FIFO /** Linux FIFO scheduler */
++#define ORO_SCHED_OTHER SCHED_OTHER /** Linux normal scheduler */
++
++
++	// high-resolution time to timespec
++	// hrt is in ticks
++	static inline TIME_SPEC ticks2timespec(TICK_TIME hrt) {
++		TIME_SPEC timevl;
++		timevl.tv_sec = hrt / 1000000000LL;
++		timevl.tv_nsec = hrt % 1000000000LL;
++		return timevl;
++	}
++
++    static inline NANO_TIME rtos_get_time_ns( void ) {
++
++        TIME_SPEC tv;
++        clock_gettime(CLOCK_REALTIME, &tv);
++        // we can not include the C++ Time.hpp header !
++#ifdef __cplusplus
++        return NANO_TIME( tv.tv_sec ) * 1000000000LL + NANO_TIME( tv.tv_nsec );
++#else
++        return ( NANO_TIME ) ( tv.tv_sec * 1000000000LL ) + ( NANO_TIME ) ( tv.tv_nsec );
++#endif
++    }
++
++    /**
++     * This function should return ticks,
++     * but we use ticks == nsecs in userspace
++     */
++    static inline NANO_TIME rtos_get_time_ticks() {
++        return rtos_get_time_ns();
++    }
++
++    static inline int rtos_nanosleep( const TIME_SPEC * rqtp, TIME_SPEC * rmtp ) {
++        //    return usleep(rqtp->tv_nsec/1000L);
++        return nanosleep( rqtp, rmtp );
++    }
++
++    /**
++     * No conversions are needed in userspace.
++     * The HBGenerator needs this for accurate timekeeping,
++     * which is an anachronism in userspace.
++     */
++    static inline
++    long long nano2ticks( long long nano ) {
++        return nano;
++    }
++
++    static inline
++    long long ticks2nano( long long count ) {
++        return count;
++    }
++
++	typedef sem_t rt_sem_t;
++
++    static inline int rtos_sem_init(rt_sem_t* m, int value ) {
++        return sem_init(m, 0, value);
++    }
++
++    static inline int rtos_sem_destroy(rt_sem_t* m ) {
++        return sem_destroy(m);
++    }
++
++    static inline int rtos_sem_signal(rt_sem_t* m ) {
++        return sem_post(m);
++    }
++
++    static inline int rtos_sem_wait(rt_sem_t* m ) {
++        return sem_wait(m);
++    }
++
++    static inline int rtos_sem_trywait(rt_sem_t* m ) {
++        return sem_trywait(m);
++    }
++
++    static inline int rtos_sem_wait_timed(rt_sem_t* m, NANO_TIME delay ) {
++		TIME_SPEC timevl, delayvl;
++        clock_gettime(CLOCK_REALTIME, &timevl);
++        delayvl = ticks2timespec(delay);
++
++        // add current time with delay, detect&correct overflows.
++        timevl.tv_sec += delayvl.tv_sec;
++        timevl.tv_nsec += delayvl.tv_nsec;
++        if ( timevl.tv_nsec >= 1000000000) {
++            ++timevl.tv_sec;
++            timevl.tv_nsec -= 1000000000;
++        }
++
++        assert( 0 <= timevl.tv_nsec);
++        assert( timevl.tv_nsec < 1000000000 );
++
++        /// \todo should really deal with errno=EINTR due to signal,
++        /// and errno=ETIMEDOUT appropriately.
++        return sem_timedwait( m, &timevl);
++    }
++
++    static inline int rtos_sem_wait_until(rt_sem_t* m, NANO_TIME abs_time ) {
++        TIME_SPEC arg_time = ticks2timespec( abs_time );
++        return sem_timedwait( m, &arg_time);
++    }
++
++    static inline int rtos_sem_value(rt_sem_t* m ) {
++		int val = 0;
++        if ( sem_getvalue(m, &val) == 0)
++			return val;
++		return -1;
++    }
++
++    // Mutex functions
++
++    typedef pthread_mutex_t rt_mutex_t;
++    typedef pthread_mutex_t rt_rec_mutex_t;
++
++    static inline int rtos_mutex_init(rt_mutex_t* m) {
++        return pthread_mutex_init(m, 0 );
++    }
++
++    static inline int rtos_mutex_destroy(rt_mutex_t* m ) {
++        return pthread_mutex_destroy(m);
++    }
++
++    static inline int rtos_mutex_rec_init(rt_mutex_t* m) {
++        pthread_mutexattr_t ma_t;
++        pthread_mutexattr_init(&ma_t);
++//		pthread_mutexattr_settype(&ma_t,PTHREAD_MUTEX_RECURSIVE_NP);
++        return pthread_mutex_init(m, &ma_t );
++    }
++
++    static inline int rtos_mutex_rec_destroy(rt_mutex_t* m ) {
++        return pthread_mutex_destroy(m);
++    }
++
++    static inline int rtos_mutex_lock( rt_mutex_t* m) {
++        return pthread_mutex_lock(m);
++    }
++
++    static inline int rtos_mutex_rec_lock( rt_mutex_t* m) {
++        return pthread_mutex_lock(m);
++    }
++
++    static inline int rtos_mutex_lock_until( rt_mutex_t* m, NANO_TIME abs_time) {
++        TIME_SPEC arg_time = ticks2timespec( abs_time );
++        return pthread_mutex_timedlock(m, &arg_time);
++    }
++
++    static inline int rtos_mutex_rec_lock_until( rt_mutex_t* m, NANO_TIME abs_time) {
++        TIME_SPEC arg_time = ticks2timespec( abs_time );
++        return pthread_mutex_timedlock(m, &arg_time);
++    }
++
++    static inline int rtos_mutex_trylock( rt_mutex_t* m) {
++        return pthread_mutex_trylock(m);
++    }
++
++    static inline int rtos_mutex_rec_trylock( rt_mutex_t* m) {
++        return pthread_mutex_trylock(m);
++    }
++
++    static inline int rtos_mutex_unlock( rt_mutex_t* m) {
++        return pthread_mutex_unlock(m);
++    }
++
++    static inline int rtos_mutex_rec_unlock( rt_mutex_t* m) {
++        return pthread_mutex_unlock(m);
++    }
++
++    static inline void rtos_enable_rt_warning() {
++    }
++
++    static inline void rtos_disable_rt_warning() {
++    }
++
++    typedef pthread_cond_t rt_cond_t;
++
++    static inline int rtos_cond_init(rt_cond_t *cond) {
++        return pthread_cond_init(cond, NULL);
++    }
++
++    static inline int rtos_cond_destroy(rt_cond_t *cond) {
++        return pthread_cond_destroy(cond);
++    }
++
++    static inline int rtos_cond_wait(rt_cond_t *cond, rt_mutex_t *mutex) {
++        return pthread_cond_wait(cond, mutex);
++    }
++
++    static inline int rtos_cond_timedwait(rt_cond_t *cond, rt_mutex_t *mutex, NANO_TIME abs_time) {
++        TIME_SPEC arg_time = ticks2timespec( abs_time );
++        return pthread_cond_timedwait(cond, mutex, &arg_time);
++    }
++
++    static inline int rtos_cond_broadcast(rt_cond_t *cond) {
++        return pthread_cond_broadcast(cond);
++    }
++
++#define rtos_printf printf
++
++#ifdef __cplusplus
++}
++
++#endif
++#endif
+--- rock/tools/rtt/rtt/os/rtems/fosi_internal.cpp	1970-01-01 01:00:00.000000000 +0100
++++ rock/tools/rtt/rtt/os/rtems/fosi_internal.cpp	2011-10-06 18:09:46.717107001 +0200
+@@ -0,0 +1,331 @@
++/***************************************************************************
++  tag: Peter Soetens  Sat May 21 20:15:51 CEST 2005  fosi_internal.hpp
++
++                        fosi_internal.hpp -  description
++                           -------------------
++    begin                : Sat May 21 2005
++    copyright            : (C) 2005 Peter Soetens
++    email                : peter.soetens@mech.kuleuven.ac.be
++
++    ***************************************************************************
++    *   This library is free software; you can redistribute it and/or         *
++    *   modify it under the terms of the GNU General Public                   *
++    *   License as published by the Free Software Foundation;                 *
++    *   version 2 of the License.                                             *
++    *                                                                         *
++    *   As a special exception, you may use this file as part of a free       *
++    *   software library without restriction.  Specifically, if other files   *
++    *   instantiate templates or use macros or inline functions from this     *
++    *   file, or you compile this file and link it with other files to        *
++    *   produce an executable, this file does not by itself cause the         *
++    *   resulting executable to be covered by the GNU General Public          *
++    *   License.  This exception does not however invalidate any other        *
++    *   reasons why the executable file might be covered by the GNU General   *
++    *   Public License.                                                       *
++    *                                                                         *
++    *   This library is distributed in the hope that it will be useful,       *
++    *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
++    *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU     *
++    *   Lesser General Public License for more details.                       *
++    *                                                                         *
++    *   You should have received a copy of the GNU General Public             *
++    *   License along with this library; if not, write to the Free Software   *
++    *   Foundation, Inc., 59 Temple Place,                                    *
++    *   Suite 330, Boston, MA  02111-1307  USA                                *
++    *                                                                         *
++    ***************************************************************************/
++
++
++#include "../ThreadInterface.hpp"
++#include "fosi.h"
++#include "../fosi_internal_interface.hpp"
++#include "../../Logger.hpp"
++#include <cassert>
++#include <sys/time.h>
++#include <sys/resource.h>
++#include <iostream>
++#include <cstdlib>
++#include <sched.h>
++using namespace std;
++
++#define INTERNAL_QUAL
++
++namespace RTT { namespace os {
++
++	INTERNAL_QUAL int rtos_task_create_main(RTOS_TASK* main_task) {
++        const char* name = "main";
++        main_task->wait_policy = ORO_WAIT_ABS;
++	    main_task->name = strcpy( (char*)malloc( (strlen(name) + 1) * sizeof(char)), name);
++        main_task->thread = pthread_self();
++	    pthread_attr_init( &(main_task->attr) );
++	    struct sched_param sp;
++	    sp.sched_priority=0;
++	    // Set priority
++	    // fixme check return value and bail out if necessary
++	    pthread_attr_setschedparam(&(main_task->attr), &sp);
++        main_task->priority = sp.sched_priority;
++	    return 0;
++	}
++
++	INTERNAL_QUAL int rtos_task_delete_main(RTOS_TASK* main_task) {
++        pthread_attr_destroy( &(main_task->attr) );
++        free(main_task->name);
++	    return 0;
++	}
++
++	INTERNAL_QUAL int rtos_task_create(RTOS_TASK* task,
++					   int priority,
++					   const char * name,
++					   int sched_type,
++					   size_t stack_size,
++					   void * (*start_routine)(void *),
++					   ThreadInterface* obj) {
++        int rv; // return value
++        task->wait_policy = ORO_WAIT_ABS;
++        rtos_task_check_priority( &sched_type, &priority );
++        // Save priority internally, since the pthread_attr* calls are broken !
++        // we will pick it up later in rtos_task_set_scheduler().
++        task->priority = priority;
++
++	    // Set name
++	    if ( strlen(name) == 0 )
++            name = "Thread";
++	    task->name = strcpy( (char*)malloc( (strlen(name) + 1) * sizeof(char)), name);
++
++	    if ( (rv = pthread_attr_init(&(task->attr))) != 0 ){
++            return rv;
++	    }
++	    // Set scheduler type (_before_ assigning priorities!)
++	    if ( (rv = pthread_attr_setschedpolicy(&(task->attr), sched_type)) != 0){
++            return rv;
++	    }
++        // Set stack size
++        if (stack_size )
++            if ( (rv = pthread_attr_setstacksize(&(task->attr), stack_size)) != 0){
++                return rv;
++            }
++        pthread_attr_getschedpolicy(&(task->attr), &rv );
++        assert( rv == sched_type );
++	    /* SCHED_OTHER tasks are always assigned static priority 0, see
++	       man sched_setscheduler
++	    */
++        struct sched_param sp;
++	    if (sched_type != SCHED_OTHER){
++            sp.sched_priority=priority;
++            // Set priority
++            if ( (rv = pthread_attr_setschedparam(&(task->attr), &sp)) != 0 ){
++                return rv;
++            }
++	    }
++	    rv = pthread_create(&(task->thread), &(task->attr),
++                              start_routine, obj);
++        log(Debug) <<"Created Posix thread "<< task->thread <<endlog();
++        return rv;
++	}
++
++	INTERNAL_QUAL void rtos_task_yield(RTOS_TASK* t) {
++#if 0
++        //under plain gnulinux, sched_yield may have little influence, so sleep
++        // to force rescheduling of other threads.
++	    NANO_TIME timeRemaining = 1000; // 1ms
++		TIME_SPEC ts( ticks2timespec( timeRemaining ) );
++		rtos_nanosleep( &ts , NULL );
++#else
++        int ret = sched_yield();
++        if ( ret != 0)
++            perror("rtos_task_yield");
++#endif
++	}
++
++	INTERNAL_QUAL int rtos_task_is_self(const RTOS_TASK* task) {
++	    pthread_t self = pthread_self();
++	    if ( pthread_equal(self, task->thread) == 0 ) // zero means false.
++	        return 0;
++	    return 1;
++	}
++
++    INTERNAL_QUAL int rtos_task_set_scheduler(RTOS_TASK* task, int sched_type) {
++        int policy = -1;
++        struct sched_param param;
++        // first check the argument
++        if ( task && task->thread != 0 && rtos_task_check_scheduler( &sched_type) == -1 )
++            return -1;
++        // if sched_type is different, the priority must change as well.
++        if (pthread_getschedparam(task->thread, &policy, &param) == 0) {
++            // now update the priority
++            param.sched_priority = task->priority;
++            rtos_task_check_priority( &sched_type, &param.sched_priority );
++            // write new policy:
++            return pthread_setschedparam( task->thread, sched_type, &param);
++        }
++        return -1;
++    }
++
++    INTERNAL_QUAL int rtos_task_get_scheduler(const RTOS_TASK* task) {
++        int policy = -1;
++        struct sched_param param;
++        // first retrieve thread scheduling parameters:
++        if ( task && task->thread != 0 && pthread_getschedparam(task->thread, &policy, &param) == 0)
++            return policy;
++        return -1;
++    }
++
++	INTERNAL_QUAL void rtos_task_make_periodic(RTOS_TASK* mytask, NANO_TIME nanosecs ) {
++	    // set period
++	    mytask->period = nanosecs;
++	    // set next wake-up time.
++	    mytask->periodMark = ticks2timespec( nano2ticks( rtos_get_time_ns() + nanosecs ) );
++	}
++
++	INTERNAL_QUAL void rtos_task_set_period( RTOS_TASK* mytask, NANO_TIME nanosecs ) {
++        rtos_task_make_periodic(mytask, nanosecs);
++	}
++
++  INTERNAL_QUAL void rtos_task_set_wait_period_policy( RTOS_TASK* task, int policy ) {
++    task->wait_policy = policy;
++  }
++
++	INTERNAL_QUAL int rtos_task_wait_period( RTOS_TASK* task ) {
++	    if ( task->period == 0 )
++            return 0;
++
++        // record this to detect overrun.
++	    NANO_TIME now = rtos_get_time_ns();
++	    NANO_TIME wake= task->periodMark.tv_sec * 1000000000LL + task->periodMark.tv_nsec;
++
++        // wait for a wakeup signal.
++        // while ( clock_nanosleep(CLOCK_REALTIME, TIMER_ABSTIME, &(task->periodMark), NULL) != 0 && errno == EINTR ) {
++        //     errno = 0;
++        // }
++        // Changer nanosleep instead clock_nanosleep because Rtems has not implemented clock_nanosleep  POSIX call
++        while (nanosleep(&(task->periodMark),NULL) != 0 && errno == EINTR){
++             errno = 0;
++        }
++
++        if (task->wait_policy == ORO_WAIT_ABS) {
++          // program next period:
++          // 1. convert period to timespec
++          TIME_SPEC ts = ticks2timespec( nano2ticks( task->period) );
++          // 2. Add ts to periodMark (danger: tn guards for overflows!)
++          NANO_TIME tn = (task->periodMark.tv_nsec + ts.tv_nsec);
++          task->periodMark.tv_nsec = tn % 1000000000LL;
++          task->periodMark.tv_sec += ts.tv_sec + tn / 1000000000LL;
++        }
++        else {
++          TIME_SPEC ts = ticks2timespec( nano2ticks( task->period) );
++          TIME_SPEC now = ticks2timespec( rtos_get_time_ns() );
++          NANO_TIME tn = (now.tv_nsec + ts.tv_nsec);
++          task->periodMark.tv_nsec = tn % 1000000000LL;
++          task->periodMark.tv_sec = ts.tv_sec + now.tv_sec + tn / 1000000000LL;
++        }
++
++	    return now > wake ? -1 : 0;
++	}
++
++	INTERNAL_QUAL void rtos_task_delete(RTOS_TASK* mytask) {
++        pthread_join( mytask->thread, 0);
++        pthread_attr_destroy( &(mytask->attr) );
++	    free(mytask->name);
++	}
++
++    INTERNAL_QUAL int rtos_task_check_scheduler(int* scheduler) {
++        // TODO
++        //if (*scheduler != SCHED_OTHER && geteuid() != 0 ) {
++        //    // they're not root and they want a real-time priority, which _might_
++        //    // be acceptable if they're using pam_limits and have set the rtprio ulimit
++        //    // (see "/etc/security/limits.conf" and "ulimit -a")
++        //    struct rlimit	r;
++        //    if ((0 != getrlimit(RLIMIT_RTPRIO, &r)) || (0 == r.rlim_cur)) {
++        //        log(Warning) << "Lowering scheduler type to SCHED_OTHER for non-privileged users.." <<endlog();
++        //        *scheduler = SCHED_OTHER;
++        //        return -1;
++        //    }
++        //}
++        if (*scheduler != SCHED_OTHER && *scheduler != SCHED_FIFO && *scheduler != SCHED_RR ) {
++            log(Error) << "Unknown scheduler type." <<endlog();
++            *scheduler = SCHED_OTHER;
++            return -1;
++        }
++        return 0;
++    }
++
++	INTERNAL_QUAL int rtos_task_check_priority(int* scheduler, int* priority) {
++        int ret = 0;
++        // check scheduler first.
++        ret = rtos_task_check_scheduler(scheduler);
++
++        // correct priority
++        if (*scheduler == SCHED_OTHER) {
++            if ( *priority != 0 ) {
++                if (*priority != LowestPriority)
++                    log(Warning) << "Forcing priority ("<<*priority<<") of thread with SCHED_OTHER policy to 0." <<endlog();
++                *priority = 0;
++                ret = -1;
++            }
++        } else {
++            // SCHED_FIFO/SCHED_RR:
++            if (*priority <= 0){
++                log(Warning) << "Forcing priority ("<<*priority<<") of thread with !SCHED_OTHER policy to 1." <<endlog();
++                *priority = 1;
++                ret = -1;
++            }
++            if (*priority > 99){
++                log(Warning) << "Forcing priority ("<<*priority<<") of thread with !SCHED_OTHER policy to 99." <<endlog();
++                *priority = 99;
++                ret = -1;
++            }
++            // and limit them according to pam_Limits (only if not root)
++            // TODO
++            //if ( geteuid() != 0 ) {
++            //    struct rlimit	r;
++            //    if (0 == getrlimit(RLIMIT_RTPRIO, &r)) {
++            //        if (*priority > (int)r.rlim_cur) {
++            //            log(Warning) << "Forcing priority ("<<*priority<<") of thread with !SCHED_OTHER policy to the pam_limit of " << r.rlim_cur <<endlog();
++            //            *priority = r.rlim_cur;
++            //            ret = -1;
++            //        }
++            //    }
++            //    else {
++            //        // this should not be possible, but do something intelligent
++            //        *priority = 1;
++            //        ret = -1;
++            //    }
++            //}
++        }
++        return ret;
++    }
++
++	INTERNAL_QUAL int rtos_task_set_priority(RTOS_TASK * task, int priority) {
++        int policy = 0;
++        struct sched_param param;
++        // first retrieve thread scheduling parameters:
++        if( task && task->thread != 0 && pthread_getschedparam(task->thread, &policy, &param) == 0) {
++            if ( rtos_task_check_priority( &policy, &priority ) != 0 )
++                return -1;
++            param.sched_priority = priority;
++            task->priority = priority; // store for set_scheduler
++            // write new policy:
++            return pthread_setschedparam( task->thread, policy, &param);
++        }
++        return -1;
++    }
++
++	INTERNAL_QUAL int rtos_task_get_priority(const RTOS_TASK *task) {
++        // if sched_other, return the 'virtual' priority
++        int policy = 0;
++        struct sched_param param;
++        // first retrieve thread scheduling parameters:
++        if ( task == 0 )
++            return -1;
++        if ( task->thread == 0 || pthread_getschedparam(task->thread, &policy, &param) != 0)
++            return task->priority;
++        return param.sched_priority;
++	}
++
++	INTERNAL_QUAL const char * rtos_task_get_name(const RTOS_TASK* task) {
++	    return task->name;
++	}
++
++    }
++}
++#undef INTERNAL_QUAL
+--- rock/tools/rtt/rtt/os/rtems/rtems.h	1970-01-01 01:00:00.000000000 +0100
++++ rock/tools/rtt/rtt/os/rtems/rtems.h	2011-10-06 18:09:46.717107001 +0200
+@@ -0,0 +1,26 @@
++/***************************************************************************
++  tag:   Mon Aug 8 14:16 CEST 2011  rtems.h
++
++                        rtems.h -  description
++                           -------------------
++    begin                : Mon Aug 08 2011
++    copyright            : (C)
++    email                : 
++
++ ***************************************************************************
++ *   This library is free software; you can redistribute it and/or         *
++ *   modify it under the terms of the GNU General Public                   *
++ *   License as published by the Free Software Foundation;                 *
++ *   version 2 of the License.                                             *
++ *                                                                         *
++ *   This library is distributed in the hope that it will be useful,       *
++ *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
++ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU     *
++ *   Lesser General Public License for more details.                       *
++ *                                                                         *
++ *   You should have received a copy of the GNU General Public             *
++ *   License along with this library; if not, write to the Free Software   *
++ *   Foundation, Inc., 59 Temple Place,                                    *
++ *   Suite 330, Boston, MA  02111-1307  USA                                *
++ *                                                                         *
++ ***************************************************************************/
+--- rock/tools/rtt/rtt/os/rtems/rtemsthreads.cpp	1970-01-01 01:00:00.000000000 +0100
++++ rock/tools/rtt/rtt/os/rtems/rtemsthreads.cpp	2011-10-06 18:09:46.717107001 +0200
+@@ -0,0 +1,40 @@
++/***************************************************************************
++  tag: 
++
++                        rtems.h -  description
++                           -------------------
++    begin                : Mon Aug 08 2011
++    copyright            : (C) 2011 
++    email                : 
++
++ ***************************************************************************
++ *   This library is free software; you can redistribute it and/or         *
++ *   modify it under the terms of the GNU General Public                   *
++ *   License as published by the Free Software Foundation;                 *
++ *   version 2 of the License.                                             *
++ *                                                                         *
++ *   This library is distributed in the hope that it will be useful,       *
++ *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
++ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU     *
++ *   Lesser General Public License for more details.                       *
++ *                                                                         *
++ *   You should have received a copy of the GNU General Public             *
++ *   License along with this library; if not, write to the Free Software   *
++ *   Foundation, Inc., 59 Temple Place,                                    *
++ *   Suite 330, Boston, MA  02111-1307  USA                                *
++ *                                                                         *
++ ***************************************************************************/
++
++
++#include <os/threads.hpp>
++
++namespace RTT
++{ namespace os {
++
++    const int LowestPriority = 1;
++
++    const int HighestPriority = 99;
++
++    const int IncreasePriority = 1;
++
++}}
+--- rock/tools/rtt/rtt/plugin/PluginLoader.cpp	2011-09-10 19:52:16.000000000 +0200
++++ rock/tools/rtt/rtt/plugin/PluginLoader.cpp	2011-10-06 18:09:46.717107001 +0200
+@@ -53,7 +53,9 @@
+ #include "../internal/GlobalService.hpp"
+ 
+ #include <cstdlib>
++#ifndef __RTEMS__
+ #include <dlfcn.h>
++#endif
+ 
+ 
+ using namespace RTT;
+@@ -475,6 +477,7 @@ bool PluginLoader::isLoadedInternal(stri
+ 
+ // loads a single plugin in the current process.
+ bool PluginLoader::loadInProcess(string file, string shortname, string kind, bool log_error) {
++#ifndef __RTEMS__
+     path p(file);
+     char* error;
+     void* handle;
+@@ -568,6 +571,7 @@ bool PluginLoader::loadInProcess(string
+             log(Error) <<"Not a plugin: " << error << endlog();
+     }
+     dlclose(handle);
++#endif
+     return false;
+ }
+ 
+--- rock/tools/rtt/rtt/rtt-config.h.in	2011-10-06 14:22:44.013107001 +0200
++++ rock/tools/rtt/rtt/rtt-config.h.in	2011-10-06 18:09:46.717107001 +0200
+@@ -22,6 +22,8 @@
+ #endif
+ # if defined( __GNUC__ ) && defined( __i386__ )
+ #  define OROBLD_OS_ARCH_i386
++# elif defined( __RTEMS__ ) && defined( __SPARC__ )
++#  define OROBLD_OS_ARCH_sparc
+ # elif defined( __GNUC__ ) && defined( __x86_64__ )
+ #  define OROBLD_OS_ARCH_x86_64
+ # elif defined( __GNUC__ ) && (defined( __powerpc__ ) || defined( __PPC__ ) )
+--- rock/tools/rtt/rtt/types/TypekitPlugin.hpp	2011-09-10 19:52:17.000000000 +0200
++++ rock/tools/rtt/rtt/types/TypekitPlugin.hpp	2011-10-06 18:09:46.717107001 +0200
+@@ -127,7 +127,7 @@ namespace RTT
+ #define ORO_TYPEKIT_PLUGIN( TYPEKIT ) \
+     namespace RTT { class TaskContext; } \
+     extern "C" {                      \
+-        RTT_EXPORT bool loadRTTPlugin(RTT::TaskContext* tc); \
++        static RTT_EXPORT bool loadRTTPlugin(RTT::TaskContext* tc); \
+         bool loadRTTPlugin(RTT::TaskContext* tc) { \
+             if (tc == 0) { \
+                 RTT::types::TypekitRepository::Import( new TYPEKIT() ); \
+@@ -135,12 +135,12 @@ namespace RTT
+             } \
+             return false; \
+         } \
+-        RTT_EXPORT std::string getRTTPluginName(); \
++        static RTT_EXPORT std::string getRTTPluginName(); \
+         std::string getRTTPluginName() { \
+         TYPEKIT tk; \
+         return tk.getName(); \
+         } \
+-        RTT_EXPORT std::string getRTTTargetName(); \
++        static RTT_EXPORT std::string getRTTTargetName(); \
+         std::string getRTTTargetName() { \
+             return OROCOS_TARGET_NAME; \
+         } \
+--- rock/tools/rtt/tests/testtypes/types/CMakeLists.txt	2011-09-10 19:52:15.000000000 +0200
++++ rock/tools/rtt/tests/testtypes/types/CMakeLists.txt	2011-10-07 00:22:25.813107001 +0200
+@@ -1,5 +1,10 @@
+-
++  if (NOT NOT_BUILD_SHARED)
+   ADD_LIBRARY(testtypes_plugin SHARED plugins_test_types.cpp sequence_types.cpp struct_types.cpp array_types.cpp)
++  endif (NOT NOT_BUILD_SHARED)
++
++  if (BUILD_STATIC)
++  ADD_LIBRARY(testtypes_plugin STATIC plugins_test_types.cpp sequence_types.cpp struct_types.cpp array_types.cpp)
++  endif (BUILD_STATIC)
+ 
+   # Allows us to build the plugin not in the debug/ or release/ subdir
+   if (MSVC)
+--- rock/tools/rtt/rtt/transports/mqueue/CMakeLists.txt	2011-09-10 19:52:16.000000000 +0200
++++ rock/tools/rtt/rtt/transports/mqueue/CMakeLists.txt	2011-10-07 00:25:03.125107001 +0200
+@@ -32,8 +32,9 @@ IF ( BUILD_STATIC )
+   COMPILE_FLAGS "${CMAKE_CXX_FLAGS_ADD}"
+   LINK_FLAGS "${MQ_LDFLAGS} ${CMAKE_LD_FLAGS_ADD}"
+   COMPILE_DEFINITIONS "${OROCOS-RTT_DEFINITIONS}")
+-ENDIF( BUILD_STATIC )
+ 
++ENDIF( BUILD_STATIC )
++IF(NOT NOT_BUILD_SHARED )
+   ADD_LIBRARY(orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic SHARED ${CPPS})
+   TARGET_LINK_LIBRARIES(orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic 
+ 	orocos-rtt-${OROCOS_TARGET}_dynamic
+@@ -49,6 +50,7 @@ ENDIF( BUILD_STATIC )
+   SOVERSION "${RTT_VERSION_MAJOR}.${RTT_VERSION_MINOR}"
+   VERSION "${RTT_VERSION}")
+ 
++ENDIF(NOT NOT_BUILD_SHARED )
+ create_pc_flags( "${MQ_DEFINITIONS}" "${MQ_INCLUDE_DIRS}" "${MQ_LIBRARIES}" RTT_MQ_DEFINES RTT_MQ_CFLAGS RTT_MQ_LINKFLAGS)
+ 
+ CONFIGURE_FILE( ${CMAKE_CURRENT_SOURCE_DIR}/orocos-rtt-mqueue.pc.in ${CMAKE_CURRENT_BINARY_DIR}/orocos-rtt-mqueue-${OROCOS_TARGET}.pc @ONLY)
+@@ -58,18 +60,22 @@ IF ( BUILD_STATIC )
+   INSTALL(TARGETS             orocos-rtt-mqueue-${OROCOS_TARGET}_static
+           EXPORT              ${LIBRARY_EXPORT_FILE}
+           ARCHIVE DESTINATION lib )
++  #target_link_libraries( rtt-transport-mqueue-${OROCOS_TARGET}_plugin orocos-rtt-mqueue-${OROCOS_TARGET}_static)
+ ENDIF( BUILD_STATIC )
+ 
++IF(NOT NOT_BUILD_SHARED)
++  INSTALL(TARGETS             orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic
++          EXPORT              ${LIBRARY_EXPORT_FILE}
++          LIBRARY DESTINATION lib RUNTIME DESTINATION bin )
++  target_link_libraries( rtt-transport-mqueue-${OROCOS_TARGET}_plugin orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic)
++ENDIF(NOT NOT_BUILD_SHARED)
++
+   SET(RTT_DEFINITIONS "${OROCOS-RTT_DEFINITIONS}")
+   ADD_RTT_TYPEKIT( rtt-transport-mqueue ${RTT_VERSION} MQLib.cpp)
+-  target_link_libraries( rtt-transport-mqueue-${OROCOS_TARGET}_plugin orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic)
++  INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/orocos-rtt-mqueue-${OROCOS_TARGET}.pc DESTINATION  lib/pkgconfig )
+   set_target_properties( rtt-transport-mqueue-${OROCOS_TARGET}_plugin PROPERTIES
+     LINK_FLAGS "${MQ_LDFLAGS} ${CMAKE_LD_FLAGS_ADD}")
+ 
+-  INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/orocos-rtt-mqueue-${OROCOS_TARGET}.pc DESTINATION  lib/pkgconfig )
+-  INSTALL(TARGETS             orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic
+-          EXPORT              ${LIBRARY_EXPORT_FILE}
+-          LIBRARY DESTINATION lib RUNTIME DESTINATION bin )
+   INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/rtt-mqueue-config.h TransportPlugin.hpp DESTINATION include/rtt/transports/mqueue )
+ 
+ ENDIF(ENABLE_MQ)
+--- rock/tools/rtt/debian/liborocos-rtt-corba-template-dev.install	2011-09-10 19:52:15.000000000 +0200
++++ rock/tools/rtt/debian/liborocos-rtt-corba-template-dev.install	2011-10-08 20:13:19.319912996 +0200
+@@ -1,3 +1,3 @@
+-usr/lib/liborocos-rtt-corba-@TARGET@.so
+-usr/lib/orocos/@TARGET@/types/librtt-transport-corba-@TARGET@.so
++usr/lib/liborocos-rtt-corba-@TARGET@.*
++usr/lib/orocos/@TARGET@/types/librtt-transport-corba-@TARGET@.*
+ usr/lib/pkgconfig/orocos-rtt-corba-@TARGET@.pc
+--- rock/tools/rtt/debian/liborocos-rtt-corba-template.install	2011-09-10 19:52:15.000000000 +0200
++++ rock/tools/rtt/debian/liborocos-rtt-corba-template.install	2011-10-08 20:13:28.487913002 +0200
+@@ -1,2 +1,2 @@
+-usr/lib/liborocos-rtt-corba-@TARGET@*.so.*
+-usr/lib/orocos/@TARGET@/types/librtt-transport-corba-@TARGET@*.so.*
++usr/lib/liborocos-rtt-corba-@TARGET@*.*.*
++usr/lib/orocos/@TARGET@/types/librtt-transport-corba-@TARGET@*.*.*
+--- rock/tools/rtt/debian/liborocos-rtt-template-dev.install	2011-09-10 19:52:15.000000000 +0200
++++ rock/tools/rtt/debian/liborocos-rtt-template-dev.install	2011-10-08 20:13:45.795913269 +0200
+@@ -1,9 +1,9 @@
+-usr/lib/liborocos-rtt-@TARGET@.so
+-usr/lib/liborocos-rtt-mqueue-@TARGET@.so
+-usr/lib/orocos/@TARGET@/types/librtt-typekit-@TARGET@.so
+-usr/lib/orocos/@TARGET@/types/librtt-transport-mqueue-@TARGET@.so
+-usr/lib/orocos/@TARGET@/plugins/librtt-scripting-@TARGET@.so
+-usr/lib/orocos/@TARGET@/plugins/librtt-marshalling-@TARGET@.so
++usr/lib/liborocos-rtt-@TARGET@.*
++usr/lib/liborocos-rtt-mqueue-@TARGET@.*
++usr/lib/orocos/@TARGET@/types/librtt-typekit-@TARGET@.*
++usr/lib/orocos/@TARGET@/types/librtt-transport-mqueue-@TARGET@.*
++usr/lib/orocos/@TARGET@/plugins/librtt-scripting-@TARGET@.*
++usr/lib/orocos/@TARGET@/plugins/librtt-marshalling-@TARGET@.*
+ usr/lib/pkgconfig/orocos-rtt-@TARGET@.pc
+ usr/lib/pkgconfig/orocos-rtt-mqueue-@TARGET@.pc
+ usr/include/rtt/os/targets/@TARGET@-config.h
+--- rock/tools/rtt/debian/liborocos-rtt-template.install	2011-09-10 19:52:15.000000000 +0200
++++ rock/tools/rtt/debian/liborocos-rtt-template.install	2011-10-08 20:13:57.107913003 +0200
+@@ -1,6 +1,6 @@
+-usr/lib/liborocos-rtt-@TARGET@*.so.*
+-usr/lib/liborocos-rtt-mqueue-@TARGET@*.so.*
+-usr/lib/orocos/@TARGET@/types/librtt-typekit-@TARGET@*.so.*
+-usr/lib/orocos/@TARGET@/types/librtt-transport-mqueue-@TARGET@*.so.*
+-usr/lib/orocos/@TARGET@/plugins/librtt-scripting-@TARGET@*.so.*
+-usr/lib/orocos/@TARGET@/plugins/librtt-marshalling-@TARGET@*.so.*
++usr/lib/liborocos-rtt-@TARGET@*.*.*
++usr/lib/liborocos-rtt-mqueue-@TARGET@*.*.*
++usr/lib/orocos/@TARGET@/types/librtt-typekit-@TARGET@*.*.*
++usr/lib/orocos/@TARGET@/types/librtt-transport-mqueue-@TARGET@*.*.*
++usr/lib/orocos/@TARGET@/plugins/librtt-scripting-@TARGET@*.*.*
++usr/lib/orocos/@TARGET@/plugins/librtt-marshalling-@TARGET@*.*.*
+--- rock/tools/rtt/orocos-rtt-config.cmake	2011-09-10 19:52:16.000000000 +0200
++++ rock/tools/rtt/orocos-rtt-config.cmake	2011-09-10 19:52:16.000000000 +0200
+@@ -112,11 +112,19 @@ endif()
+ include("${OROCOS-RTT_IMPORT_FILE}")
+ 
+ # Core RTT libraries
+-set(OROCOS-RTT_TARGET "${PREFIX}orocos-rtt-${OROCOS_TARGET}_dynamic")
++if (BUILD_STATIC)
++	set (TYPE "static")
++endif (BUILD_STATIC)
++
++if (NOT NOT_BUILD_SHARED)
++	set (TYPE "dynamic")
++endif (NOT NOT_BUILD_SHARED)
++
++set(OROCOS-RTT_TARGET "${PREFIX}orocos-rtt-${OROCOS_TARGET}_${TYPE}")
+ if(TARGET ${OROCOS-RTT_TARGET})
+   set(OROCOS-RTT_LIBRARIES ${OROCOS-RTT_TARGET})
+ else()
+-  message(FATAL_ERROR "Imported target ${PREFIX}orocos-rtt-${OROCOS_TARGET}_dynamic not found. Please contact a project developer to fix this issue")
++  message(FATAL_ERROR "Imported target ${PREFIX}orocos-rtt-${OROCOS_TARGET}_${TYPE} not found. Please contact a project developer to fix this issue")
+ endif()
+ 
+ # Typekit support
+@@ -127,7 +135,7 @@ if(TARGET ${OROCOS-RTT_TYPEKIT_TARGET})
+ endif()
+ 
+ # Corba support
+-set(OROCOS-RTT_CORBA_TARGET "${PREFIX}orocos-rtt-corba-${OROCOS_TARGET}_dynamic")
++set(OROCOS-RTT_CORBA_TARGET "${PREFIX}orocos-rtt-corba-${OROCOS_TARGET}_${TYPE}")
+ if(TARGET ${OROCOS-RTT_CORBA_TARGET})
+   set(OROCOS-RTT_CORBA_FOUND TRUE)
+   set(FOUND_TRANSPORTS "${FOUND_TRANSPORTS} corba")
+@@ -135,7 +143,7 @@ if(TARGET ${OROCOS-RTT_CORBA_TARGET})
+ endif()
+ 
+ # Mqueue support
+-set(OROCOS-RTT-MQUEUE_TARGET "${PREFIX}orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic")
++set(OROCOS-RTT-MQUEUE_TARGET "${PREFIX}orocos-rtt-mqueue-${OROCOS_TARGET}_${TYPE}")
+ if(TARGET ${OROCOS-RTT-MQUEUE_TARGET})
+   set(OROCOS-RTT_MQUEUE_FOUND TRUE)
+   set(FOUND_TRANSPORTS "${FOUND_TRANSPORTS} mqueue")
+--- rock/tools/rtt/rtt/transports/corba/CMakeLists.txt	2011-09-10 19:52:16.000000000 +0200
++++ rock/tools/rtt/rtt/transports/corba/CMakeLists.txt	2011-10-09 14:56:05.783912987 +0200
+@@ -51,8 +51,9 @@ IF ( BUILD_STATIC )
+   COMPILE_FLAGS "${CMAKE_CXX_FLAGS_ADD}"
+   LINK_FLAGS "${CMAKE_LD_FLAGS_ADD}"
+   COMPILE_DEFINITIONS "${OROCOS-RTT_DEFINITIONS}")
+-ENDIF( BUILD_STATIC )
+ 
++ENDIF( BUILD_STATIC )
++IF(NOT NOT_BUILD_SHARED )
+   ADD_LIBRARY(orocos-rtt-corba-${OROCOS_TARGET}_dynamic SHARED ${CPPS})
+   TARGET_LINK_LIBRARIES(orocos-rtt-corba-${OROCOS_TARGET}_dynamic 
+ 	orocos-rtt-${OROCOS_TARGET}_dynamic
+@@ -67,6 +68,7 @@ ENDIF( BUILD_STATIC )
+   COMPILE_DEFINITIONS "${OROCOS-RTT_DEFINITIONS}"
+   SOVERSION "${RTT_VERSION_MAJOR}.${RTT_VERSION_MINOR}"
+   VERSION "${RTT_VERSION}")
++ENDIF(NOT NOT_BUILD_SHARED )
+ 
+ create_pc_flags( "${CORBA_DEFINITIONS}" "${CORBA_INCLUDE_DIRS}" "${CORBA_LIBRARIES}" RTT_CORBA_DEFINES RTT_CORBA_CFLAGS RTT_CORBA_LINKFLAGS)
+ create_pc_flags( "${RTT_DUMMY}" "${RTT_DUMMY}" "${CORBA_USER_LINK_LIBS}" RTT_DUMMY RTT_DUMMY RTT_CORBA_USER_LINKFLAGS)
+@@ -77,22 +79,33 @@ CONFIGURE_FILE( ${CMAKE_CURRENT_SOURCE_D
+ IF ( BUILD_STATIC )
+   INSTALL(TARGETS             orocos-rtt-corba-static_${OROCOS_TARGET}
+           EXPORT              ${LIBRARY_EXPORT_FILE}
+-          ARCHIVE DESTINATION lib )
+-ENDIF( BUILD_STATIC )
++          ARCHIVE DESTINATION lib
++          LIBRARY DESTINATION lib
++          RUNTIME DESTINATION bin )
+ 
+   if (PLUGINS_CORBA_TRANSPORT_TYPES)
+     SET(RTT_DEFINITIONS "${OROCOS-RTT_DEFINITIONS}")
+     ADD_RTT_TYPEKIT(rtt-transport-corba ${RTT_VERSION} CorbaLib.cpp)
+-    target_link_libraries(rtt-transport-corba-${OROCOS_TARGET}_plugin orocos-rtt-corba-${OROCOS_TARGET}_dynamic )
++    target_link_libraries(rtt-transport-corba-${OROCOS_TARGET}_plugin orocos-rtt-corba-static_${OROCOS_TARGET})
+   endif()
++ENDIF( BUILD_STATIC )
+ 
++IF(NOT NOT_BUILD_SHARED )
+ 
+-  INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/orocos-rtt-corba-${OROCOS_TARGET}.pc DESTINATION  lib/pkgconfig )
+   INSTALL(TARGETS             orocos-rtt-corba-${OROCOS_TARGET}_dynamic
+           EXPORT              ${LIBRARY_EXPORT_FILE}
+           ARCHIVE DESTINATION lib
+           LIBRARY DESTINATION lib
+           RUNTIME DESTINATION bin )
++
++  if (PLUGINS_CORBA_TRANSPORT_TYPES)
++    SET(RTT_DEFINITIONS "${OROCOS-RTT_DEFINITIONS}")
++    ADD_RTT_TYPEKIT(rtt-transport-corba ${RTT_VERSION} CorbaLib.cpp)
++    target_link_libraries(rtt-transport-corba-${OROCOS_TARGET}_plugin orocos-rtt-corba-${OROCOS_TARGET}_dynamic )
++  endif()
++ENDIF(NOT NOT_BUILD_SHARED )
++
++  INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/orocos-rtt-corba-${OROCOS_TARGET}.pc DESTINATION  lib/pkgconfig )
+   INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/TransportPlugin.hpp ${CMAKE_CURRENT_BINARY_DIR}/rtt-corba-config.h ${IDLS} DESTINATION include/rtt/transports/corba )
+ 
+ ENDIF(ENABLE_CORBA)
+--- rock/tools/rtt/rtt/os/oro_sparc/CMakeLists.txt	1970-01-01 01:00:00.000000000 +0100
++++ rock/tools/rtt/rtt/os/oro_sparc/CMakeLists.txt	2011-10-15 23:58:39.872582326 +0200
+@@ -0,0 +1,5 @@
++FILE( GLOB CPPS [^.]*.cpp [^.]*.c)
++FILE( GLOB HPPS [^.]*.hpp [^.]*.h [^.]*.inl)
++
++GLOBAL_ADD_INCLUDE( rtt/os/oro_sparc ${HPPS})
++GLOBAL_ADD_SRC( ${CPPS})
+--- rock/tools/rtt/rtt/os/oro_sparc/oro_arch.h	1970-01-01 01:00:00.000000000 +0100
++++ rock/tools/rtt/rtt/os/oro_sparc/oro_arch.h	2011-10-16 11:58:27.769333120 +0200
+@@ -0,0 +1,94 @@
++#ifndef __GCC_ORO_SPARC__
++#define __GCC_ORO_SPARC__
++
++#include "../../rtt-config.h"
++
++#include <rtems/score/types.h> 
++#include <rtems/score/sparc.h> 
++
++typedef struct {
++    int volatile cnt;
++} oro_atomic_t;
++
++#define ORO_ATOMIC_SETUP	oro_atomic_set
++#define ORO_ATOMIC_CLEANUP(a_int)
++
++#define oro_atomic_read(a_int)		((a_int)->cnt)
++
++#define oro_atomic_set(a_int,n)		(((a_int)->cnt) = (n))
++
++// Add n to a_int
++static __inline__ void oro_atomic_add(oro_atomic_t *a_int, int n){
++   uint32_t _level;
++   _level = sparc_disable_interrupts();
++      a_int->cnt +=n;
++   sparc_enable_interrupts( _level );
++}
++
++// Substract n from a_int
++static __inline__ void oro_atomic_sub(oro_atomic_t *a_int, int n){
++   uint32_t _level;
++   _level = sparc_disable_interrupts();
++      a_int->cnt -=n;
++   sparc_enable_interrupts( _level );
++}
++
++// Substract n from a_int and test for zero
++static __inline__ int oro_atomic_sub_and_test(oro_atomic_t *a_int, int n){
++   uint32_t _level;
++   int ret;
++   _level = sparc_disable_interrupts();
++      a_int->cnt -=n;
++      ret = a_int->cnt == 0;
++   sparc_enable_interrupts( _level );
++   return ret;
++}
++
++// Increment a_int atomically
++static __inline__ void oro_atomic_inc(oro_atomic_t *a_int){
++   uint32_t _level;
++   _level = sparc_disable_interrupts();
++      ++(a_int->cnt);
++   sparc_enable_interrupts( _level );
++}
++
++// Decrement a_int atomically
++static __inline__ void oro_atomic_dec(oro_atomic_t *a_int){
++   uint32_t _level;
++   _level = sparc_disable_interrupts();
++      --(a_int->cnt);
++   sparc_enable_interrupts( _level );
++}
++
++// Decrement a_int atomically and test for zero.
++static __inline__ int oro_atomic_dec_and_test(oro_atomic_t *a_int){
++   uint32_t _level;
++   int ret;
++   _level = sparc_disable_interrupts();
++      --(a_int->cnt);
++      ret = a_int->cnt == 0;
++   sparc_enable_interrupts( _level );
++   return ret;
++}
++
++//Increment a_int atomically and test for zero.
++static __inline__ int oro_atomic_inc_and_test(oro_atomic_t *a_int){
++   uint32_t _level;
++   int ret;
++   _level = sparc_disable_interrupts();
++      ++a_int;
++      ret = a_int->cnt == 0;
++   sparc_enable_interrupts( _level );
++   return ret;
++}
++
++// Compare o with *ptr and swap with n if equal.
++template<typename T> __inline__ T oro_cmpxchg(volatile void * ptr, T o, T n){
++    uint32_t _level;
++    _level = sparc_disable_interrupts();
++       if ((uint32_t*) ptr == (uint32_t*)o) o = n;
++    sparc_enable_interrupts( _level );  
++    return o;
++}
++
++#endif 

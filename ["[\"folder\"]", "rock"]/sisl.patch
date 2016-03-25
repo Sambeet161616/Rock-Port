@@ -1,0 +1,157 @@
+--- rock/external/sisl/makefile_template	2011-09-10 19:52:12.000000000 +0200
++++ rock/external/sisl/makefile_template	2011-10-06 23:28:44.937107001 +0200
+@@ -2,6 +2,11 @@
+ #                   Choosing platform
+ #------------------------------------------------------------
+ UNAME=$(shell uname)
++ifneq ($(findstring 'rtems',$(TARGET)),'')
++  PLATFORM=rtems
++  RTEMS_TYPE_PLATFORM=yes
++  SUPPORTED_PLATFORM_FOUND=yes
++else
+ ifeq "$(UNAME)" "Linux"
+   PLATFORM=linux
+   SUPPORTED_PLATFORM_FOUND=yes
+@@ -17,6 +22,7 @@ ifeq "$(PLATFORM)" "winxp"
+   WINDOWS_TYPE_PLATFORM=yes
+   SUPPORTED_PLATFORM_FOUND=yes
+ endif
++endif
+ 
+ #------------------------------------------------------------
+ #                   VARIOUS VARIABLES
+@@ -79,6 +85,25 @@ ifeq "$(PLATFORM)" "linux"
+ 
+ endif
+ 
++ifeq "$(PLATFORM)" "rtems"
++  #TODO: Why is necessary to redefine?
++  CC=${TARGET}-gcc
++  NM=${TARGET}-nm
++  CDEFS	=-DNDEBUG -D__RTEMS__
++
++  OBJCOPY=${TARGET}-objcopy
++  RTEMS_PATH=$(RTEMS_INSTALL_DIR)/${TARGET}/$(BSP)
++  PROJECT_TOOLS=$(RTEMS_PATH)/build-tools
++  RELOCADDR       = 0x00100000
++  START16FILE     = $(RTEMS_PATH)/lib/start16.bin
++  START16ADDR     = 0x00097C00
++  HEADERADDR      = 0x00097E00
++  CFLAGS =-g -Wall -fPIC -O4 -Wall -Wno-unused -fasm  \
++  -B$(RTEMS_PATH)/lib/ -specs bsp_specs -qrtems $(IMPORT_CPPFLAGS) \
++  -I$(RTEMS_PATH)/lib/include
++
++endif
++
+ COPTS = $(CFLAGS) $(addprefix -I, $(INCLUDEDIRS)) $(CDEFS)
+ 
+ #------------------------------------------------------------
+@@ -113,7 +138,16 @@ ifeq "$(PLATFORM)" "linux"
+   endif
+ endif
+ 
+-		
++ifeq "$(PLATFORM)" "rtems"
++    CXX		=${TARGET}-g++
++    AR		=${TARGET}-ar
++    RANLIB      =${TARGET}-ranlib
++    LDXX	= $(AR)
++    CXXFLAGS	=-fPIC -g -Wall $(CFLAGS)
++    CXXDEFS	=
++endif
++
++
+ CXXOPTS =$(CXXFLAGS) $(addprefix -I, $(INCLUDEDIRS)) $(CXXDEFS)
+ 
+ #------------------------------------------------------------
+@@ -130,6 +164,11 @@ ifeq "$(PLATFORM)" "linux"
+   LIBNAME	=lib$(notdir $(shell pwd))_$(MODE).so
+ endif
+ 
++ifeq "$(PLATFORM)" "rtems"
++  LIBNAME	=lib$(notdir $(shell pwd))_$(MODE).a
++endif
++
++
+ #------------------------------------------------------------
+ #               Deciding object file names
+ #------------------------------------------------------------
+@@ -173,8 +212,14 @@ $(LIBNAME):	$(COBJS) $(CXXOBJS)
+   ifdef WINDOWS_TYPE_PLATFORM
+ 		link -lib $(LDXXFLAGS) /out:"lib/$(LIBNAME)" $^
+   else
++  ifdef RTEMS_TYPE_PLATFORM
++		#$(LDXX) -Wl,-shared -fPIC -o lib/$(LIBNAME) $^ $(LDXXFLAGS)
++		$(AR) -rcv  lib/$(LIBNAME) $^
++		$(RANLIB) lib/$(LIBNAME) 
++  else
+ 		$(LDXX) -shared -fPIC -o lib/$(LIBNAME) $^
+   endif
++  endif
+ 
+ lib/%.o:	src/%.c
+ 		$(CC) $(COPTS) -c src/$*.c -o $@
+@@ -197,12 +242,21 @@ $(CXXAPPS):	$(LIBNAME)
+ 		$(addprefix $(LIBPATH_PREFIX), $(LINKDIRS)) lib/$@.o \
+ 		$(addsuffix _$(MODE).lib, $(addprefix lib, $(LINKLIBS))) $(GRAPHICS_LIBS)
+ 		@mv $@ $@.exe
+-
+-  else 
++else
++  ifdef RTEMS_TYPE_PLATFORM
++		$(CXX) --pipe -o $@.exe $(CXXLINKOPTIONS) -Wl,-Ttext,$(RELOCADDR) \
++		$(CXXFLAGS) $(RTEMS_MAIN_MODULE) \
++		$(filter-out $(LibSuffixPattern),$^); 
++		$(OBJCOPY) -O binary $@.exe $@.bin; 
++		$(PROJECT_TOOLS)/bin2boot -v $@.bt $(HEADERADDR) 
++		$(START16FILE) $(START16ADDR) 0 $@.bin $(RELOCADDR) 0;
++		$(NM) -g -n $@.exe > $@.num; 
++  else
+ 		$(LDXX) $(LDXXFLAGS) $(addprefix $(LIBPATH_PREFIX), $(LINKDIRS)) lib/$@.o\
+ 		$(addsuffix _$(MODE), $(addprefix -l, $(LINKLIBS))) $(GRAPHICS_LIBS) \
+ 		-o $@
+   endif
++endif
+ 
+ varcheck:;	@echo "testing..."
+ #		@echo $(wildcard src/*.c)
+--- rock/external/sisl/sisl/include/sislP.h	2011-09-10 19:52:11.000000000 +0200
++++ rock/external/sisl/sisl/include/sislP.h	2011-10-06 18:09:32.261107000 +0200
+@@ -63,7 +63,7 @@
+ #include <limits.h>
+ 
+ /* Get system spesific values */
+-#if defined(_MSC_VER) || defined(__BORLANDC__) || defined(MICROSOFT)
++#if defined(_MSC_VER) || defined(__BORLANDC__) || defined(MICROSOFT) || defined(__RTEMS__)
+ #  define MAXDOUBLE   1.79769313486231570e+308
+ #  define MAXFLOAT    ((float)3.40282346638528860e+38)
+ #  define MINDOUBLE   2.22507385850720140e-308
+--- rock/.remotes/git_git___gitorious_org_rock_base_package_set_git_push_to_git_gitorious_org__rock_base_package_set_git/base.autobuild	2011-08-30 17:22:17.232809344 +0200
++++ rock/.remotes/git_git___gitorious_org_rock_base_package_set_git_push_to_git_gitorious_org__rock_base_package_set_git/base.autobuild	2011-09-05 20:54:05.467731396 +0200
+@@ -11,12 +11,24 @@ in_flavor 'next' do
+             FileUtils.mkdir_p File.dirname(include_dir)
+             FileUtils.mkdir_p lib_dir
+ 
++            
+             flavors = %w{opt nopt}
++
++            flavor = flavors.find do |flavor_name|
++               File.file?(File.join('sisl', 'lib', "libsisl_#{flavor_name}.so"))
++            end
++            if (!flavor.nil?)
++               FileUtils.cp File.join('sisl', 'lib', "libsisl_#{flavor}.so"), File.join(lib_dir, 'libsisl.so')
++               FileUtils.cp_r File.join('sisl', 'include'), include_dir
++            end
++
+             flavor = flavors.find do |flavor_name|
+-                File.file?(File.join('sisl', 'lib', "libsisl_#{flavor_name}.so"))
++               File.file?(File.join('sisl', 'lib', "libsisl_#{flavor_name}.a"))
++            end
++            if (!flavor.nil?)
++               FileUtils.cp File.join('sisl', 'lib', "libsisl_#{flavor}.a"), File.join(lib_dir, 'libsisl.a')
++               FileUtils.cp_r File.join('sisl', 'include'), include_dir
+             end
+-            FileUtils.cp File.join('sisl', 'lib', "libsisl_#{flavor}.so"), File.join(lib_dir, 'libsisl.so')
+-            FileUtils.cp_r File.join('sisl', 'include'), include_dir
+         end
+     end

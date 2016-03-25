@@ -1,0 +1,193 @@
+--- rock/base/types/base/samples/rigid_body_state.h	2011-09-10 19:52:12.578622176 +0200
++++ rock/base/types/base/samples/rigid_body_state.h	2011-09-11 19:48:23.652968056 +0200
+@@ -12,6 +12,20 @@
+ #include <base/pose.h>
+ #include <base/time.h>
+ 
++#include <math.h>
++extern int __fpclassifyf (float x);
++extern int __fpclassifyd (double x);
++
++#define FP_INFINITE    1
++#define fpclassify(__x) \
++   ((sizeof(__x) == sizeof(float))  ? __fpclassifyf(__x) : \
++   __fpclassifyd(__x))
++
++#ifndef isinf
++  #define isinf(y) (fpclassify(y) == FP_INFINITE)
++#endif
++
++
+ #include <Eigen/Core>
+ #include <Eigen/LU>
+ 
+--- rock/base/types/cmake/FindEigen2.cmake	2011-09-10 19:52:12.000000000 +0200
++++ rock/base/types/cmake/FindEigen2.cmake	2011-10-11 12:24:17.627913002 +0200
+@@ -8,6 +8,7 @@
+ # Redistribution and use is allowed according to the terms of the BSD license.
+ # For details see the accompanying COPYING-CMAKE-SCRIPTS file.
+ 
++set (EIGEN2_DIR $ENV{EIGEN2_DIR})
+ if (EIGEN2_INCLUDE_DIR)
+     # in cache already
+     set(EIGEN2_FOUND TRUE)
+@@ -15,6 +16,7 @@ else (EIGEN2_INCLUDE_DIR)
+     find_path(EIGEN2_INCLUDE_DIR NAMES Eigen/Core
+         PATH_SUFFIXES eigen2
+         HINTS
++        ${EIGEN2_DIR}
+         ${INCLUDE_INSTALL_DIR}
+         ${KDE4_INCLUDE_DIR}
+         )
+--- rock/base/types/cmake/FindSISL.cmake	2011-09-10 19:52:12.000000000 +0200
++++ rock/base/types/cmake/FindSISL.cmake	2011-10-11 12:24:17.627913002 +0200
+@@ -6,8 +6,9 @@ endif()
+ 
+ find_path(SISL_INCLUDE_DIRS "sisl/sisl.h"
+     HINTS ${SISL_PREFIX}/include ${CMAKE_INSTALL_PREFIX}/include)
++
+ find_library(SISL_LIBRARIES
+-    NAMES libsisl.so libsisl_opt.so
++    NAMES libsisl.a libsisl_opt.a libsisl.so libsisl_opt.so
+     HINTS ${SISL_PREFIX}/lib ${CMAKE_INSTALL_PREFIX}/lib)
+ 
+ include(FindPackageHandleStandardArgs)
+--- rock/base/types/cmake/Rock.cmake	2011-09-10 19:52:12.000000000 +0200
++++ rock/base/types/cmake/Rock.cmake	2011-10-11 13:01:01.635913001 +0200
+@@ -19,15 +19,38 @@ macro (rock_init PROJECT_NAME PROJECT_VE
+     project(${PROJECT_NAME})
+     set(PROJECT_VERSION ${PROJECT_VERSION})
+     list(APPEND CMAKE_MODULE_PATH $ENV{ROCK_CMAKE_MACROS})
+-    rock_use_full_rpath("${CMAKE_INSTALL_PREFIX}/lib")
+ 
++    if($ENV{OROCOS_TARGET} STREQUAL "rtems")
++        MESSAGE(STATUS "Setting RTEMS enviroment")
++	set(CMAKE_TOOLCHAIN_FILE RTEMS_toolchain.cmake)
++	SET(INSTALL_PREFIX $ENV{INSTALL_PREFIX})
++	SET(TARGET $ENV{TARGET})
++	SET(BSP $ENV{BSP})
++
++	SET(C_FLAGS "-B${INSTALL_PREFIX}/rtems/${TARGET}/${BSP}/lib/ -specs bsp_specs -qrtems  -D__RTEMS__ -DBOOST_SYSTEM_NO_DEPRECATED -D__BSD_VISIBLE -DBoost_USE_STATIC_LIBS -DBOOST_THREAD_POSIX")
++	
++	SET(CXX_FLAGS "-fpermissive -fexceptions")
++	
++	IF ("${TARGET}" MATCHES "i?86-*")
++	        SET(C_FLAGS "${C_FLAGS} -D__i386__ -Wl,-Ttext,0x00100000 -march=i486")
++	ELSEIF ("${TARGET}" MATCHES "sparc-*")
++	        SET(C_FLAGS "${C_FLAGS} -D__SPARC__")
++	ENDIF()
++	
++	SET(CMAKE_C_FLAGS ${C_FLAGS})
++	SET(CMAKE_EXE_LINKER_FLAGS ${C_FLAGS})
++	SET(CMAKE_CXX_FLAGS ${CXX_FLAGS})
++
++    endif($ENV{OROCOS_TARGET} STREQUAL "rtems")
+ 
++    rock_use_full_rpath("${CMAKE_INSTALL_PREFIX}/lib")
+     include(CheckCXXCompilerFlag)
+     include(FindPkgConfig)
+     CHECK_CXX_COMPILER_FLAG(-Wall ROCK_CXX_SUPPORTS_WALL)
+     if (ROCK_CXX_SUPPORTS_WALL)
+         add_definitions(-Wall)
+     endif()
++    add_definitions(-DBUILD_STATIC)
+     add_definitions(-DBASE_LOG_NAMESPACE=${PROJECT_NAME})
+ endmacro()
+ 
+@@ -236,7 +259,14 @@ endfunction()
+ macro(rock_library_common TARGET_NAME)
+     rock_target_definition(${TARGET_NAME} ${ARGN})
+ 
++   IF (NOT NOT_BUILD_SHARED)
+     add_library(${TARGET_NAME} SHARED ${${TARGET_NAME}_SOURCES})
++   ENDIF ()
++
++    IF (BUILD_STATIC)
++        add_library(${TARGET_NAME} STATIC ${${TARGET_NAME}_SOURCES})
++    ENDIF ()
++
+     rock_target_setup(${TARGET_NAME})
+ 
+     foreach(pkgname ${${TARGET_NAME}_DEPS_PKGCONFIG})
+@@ -293,7 +323,8 @@ function(rock_library TARGET_NAME)
+ 
+     if (${TARGET_NAME}_INSTALL)
+         install(TARGETS ${TARGET_NAME}
+-            LIBRARY DESTINATION lib)
++            LIBRARY DESTINATION lib
++            ARCHIVE DESTINATION lib)
+         install(FILES ${${TARGET_NAME}_HEADERS}
+             DESTINATION include/${PROJECT_NAME})
+     endif()
+--- rock/base/types/cmake/rtems_toolchain.cmake	1970-01-01 01:00:00.000000000 +0100
++++ rock/base/types/cmake/rtems_toolchain.cmake	2011-10-11 13:01:04.295913003 +0200
+@@ -0,0 +1,69 @@
++INCLUDE(CMakeForceCompiler)
++
++SET(INSTALL_PREFIX $ENV{INSTALL_PREFIX})
++SET(TARGET $ENV{TARGET})
++SET(BSP $ENV{BSP})
++
++SET(CMAKE_SYSTEM_NAME RTEMS)
++
++CMAKE_FORCE_C_COMPILER($ENV{TARGET}-gcc GNU)
++CMAKE_FORCE_CXX_COMPILER($ENV{TARGET}-g++ GNU)
++
++SET(__BSD_VISIBLE 1)
++
++add_definitions("-B${INSTALL_PREFIX}/rtems/${TARGET}/${BSP}/lib/ -specs bsp_specs -qrtems  -D__RTEMS__ -DBoost_USE_STATIC_LIBS -D__BSD_VISIBLE -DBOOST_SYSTEM_NO_DEPRECATED   -DBOOST_DISABLE_THREADS  -DRUBY_EXTENSIONS_AVAILABLE=NO")
++
++add_definitions ("-fpermissive -fexceptions")
++
++IF ("${TARGET}" MATCHES "i?86-*")
++       add_definitions ("-D__i386__ -Wl,-Ttext,0x00100000")
++ELSEIF ("${TARGET}" MATCHES "sparc-*")
++        add_definitions ("-D__SPARC__")
++ENDIF()
++
++SET(CMAKE_CROSSCOMPILING ON)
++
++SET(BOOST_ROOT $ENV{INSTALL_PREFIX}/boost/)
++
++SET(BOOST_INCLUDEDIR $ENV{INSTALL_PREFIX}boost/include)
++SET(BOOST_LIBRARYDIR $ENV{INSTALL_PREFIX}boost/lib)
++
++SET(Boost_USE_STATIC_LIBS ON)
++SET(Boost_ADDITIONAL_VERSIONS "1.44.0" "1.44")
++SET(Boost_COMPILER -rtems4.10)
++
++SET(DCMAKE_SYSTEM_NAME RTEMS)
++
++SET(CMAKE_SHARED_LIBRARY_C_FLAGS "")              # -pic 
++SET(CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS "")       # -shared
++SET(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS "")         # +s, flag for exe link to use shared lib
++SET(CMAKE_SHARED_LIBRARY_RUNTIME_C_FLAG "")       # -rpath
++SET(CMAKE_SHARED_LIBRARY_RUNTIME_C_FLAG_SEP "")   # : or empty
++
++SET(CMAKE_LINK_LIBRARY_SUFFIX "")
++SET(CMAKE_STATIC_LIBRARY_PREFIX "lib")
++SET(CMAKE_STATIC_LIBRARY_SUFFIX ".a")
++SET(CMAKE_SHARED_LIBRARY_PREFIX "lib")          # lib
++SET(CMAKE_SHARED_LIBRARY_SUFFIX ".a")           # .a
++SET(CMAKE_EXECUTABLE_SUFFIX ".bin")             #
++SET(CMAKE_DL_LIBS "" )
++
++SET(CMAKE_FIND_LIBRARY_PREFIXES "lib")
++SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
++
++# RTEMS doesn't support shared libs
++SET_PROPERTY(GLOBAL PROPERTY TARGET_SUPPORTS_SHARED_LIBS FALSE)
++SET(CMAKE_CXX_LINK_SHARED_LIBRARY )
++SET(CMAKE_CXX_LINK_MODULE_LIBRARY )
++SET(CMAKE_C_LINK_SHARED_LIBRARY )
++SET(CMAKE_C_LINK_MODULE_LIBRARY )
++
++# set flags 
++message("-- Setting static RTEMS")
++SET(BUILD_STATIC ON)
++
++message("-- Not building shared")
++SET(NOT_BUILD_SHARED ON)
++
++#Include rtems directories and libraries
++include_directories (${INSTALL_PREFIX}/rtems/${TARGET}/${BSP}/lib/include ${INSTALL_PREFIX}/rtems/${TARGET}/include ${INSTALL_PREFIX}${TARGET}/${BSP}/lib/include/networking)

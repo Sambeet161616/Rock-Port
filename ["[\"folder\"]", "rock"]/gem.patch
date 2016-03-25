@@ -1,0 +1,18 @@
+--- rock/.gems/gems/autobuild-1.5.51/lib/autobuild/packages/cmake.rb	2011-09-10 19:52:19.000000000 +0200
++++ rock/.gems/gems/autobuild-1.5.51/lib/autobuild/packages/cmake.rb	2011-10-11 23:49:48.299912998 +0200
+@@ -283,6 +283,15 @@ module Autobuild
+ 
+                     command = [ "cmake", "-DCMAKE_INSTALL_PREFIX=#{prefix}", "-DCMAKE_MODULE_PATH=#{CMake.module_path.join(";")}" ]
+ 
++                   path = ''
++                   Find.find(srcdir) do |f|
++                       path = f if f.match( ENV['OROCOS_TARGET']+'_toolchain.cmake')
++                   end
++
++                    if File.file?(path)
++                       command << "-DCMAKE_TOOLCHAIN_FILE=#{path}"
++                   end
++
+                     defines.each do |name, value|
+                         command << "-D#{name}=#{value}"
+                     end
