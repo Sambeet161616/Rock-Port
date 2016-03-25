@@ -1,0 +1,693 @@
+--- omniORB-4.1.4/config/config.mk	2008-03-10 09:56:33.000000000 +0100
++++ omniORB-4.1.4/config/config.mk	2011-10-09 14:24:18.237067237 +0200
+@@ -43,7 +43,7 @@
+ #  x86_uw7                   SCO UnixWare 7 (7.1.0)
+ #  x86_freebsd_3.2           x86 FreeBSD 3.2, egcs 1.1.2
+ #  x86_freebsd_4.0           x86 FreeBSD 4.0, gcc 2.95
+-#  pc486_rtems_4.5.0         x86, RTEMS, gcc 2.95.2
++   rtems_4.10.1              ${ARCH}, RTEMS, gcc 4.5.2
+ #  x86_LynxOS_4.0            x86, LynxOS 4.0, gcc 2.95.3
+ 
+ # You should also look at <top>/mk/platforms/$(platform).mk and if necessary
+--- omniORB-4.1.4/configure	2009-07-16 15:11:17.000000000 +0200
++++ omniORB-4.1.4/configure	2011-10-09 14:25:43.112218565 +0200
+@@ -13081,6 +13081,7 @@ case "$host" in
+   *-*-netbsd*)   plat_name="NetBSD";   plat_def="__netbsd__";   os_v="1";;
+   *-*-openbsd*)  plat_name="OpenBSD";  plat_def="__openbsd__";  os_v="3";;
+   *-*-sco*)      plat_name="OSR5";     plat_def="__osr5__";     os_v="5";;
++  *-rtems*)      plat_name="RTEMS";     plat_def="__rtems__";   os_v="4";;
+ esac
+ 
+ PLATFORM_NAME=$plat_name
+--- omniORB-4.1.4/configure.ac	2009-07-16 15:11:17.000000000 +0200
++++ omniORB-4.1.4/configure.ac	2011-10-09 14:25:58.764064848 +0200
+@@ -201,6 +201,7 @@ case "$host" in
+   *-*-netbsd*)   plat_name="NetBSD";   plat_def="__netbsd__";   os_v="1";;
+   *-*-openbsd*)  plat_name="OpenBSD";  plat_def="__openbsd__";  os_v="3";;
+   *-*-sco*)      plat_name="OSR5";     plat_def="__osr5__";     os_v="5";;
++  *-rtems*)      plat_name="RTEMS";     plat_def="__rtems__";   os_v="4";;
+ esac
+ 
+ AC_SUBST(PLATFORM_NAME, $plat_name)
+--- omniORB-4.1.4/include/omniORB4/CORBA_sysdep_auto.h	2005-01-07 00:08:08.000000000 +0100
++++ omniORB-4.1.4/include/omniORB4/CORBA_sysdep_auto.h	2011-10-09 14:24:18.244023290 +0200
+@@ -95,6 +95,9 @@
+ #  define _CORBA_LONGDOUBLE_DECL long double
+ #endif
+ 
++#if defined(__rtems__)
++#  undef HAS_LongDouble 
++#endif
+ 
+ #ifndef _CORBA_WCHAR_DECL
+ #  if defined(SIZEOF_WCHAR_T) && (SIZEOF_WCHAR_T > 0)
+--- omniORB-4.1.4/mk/beforeauto.mk.in	2009-06-18 10:45:32.000000000 +0200
++++ omniORB-4.1.4/mk/beforeauto.mk.in	2011-10-09 14:45:07.732379041 +0200
+@@ -1012,6 +1012,19 @@ SharedLibraryPlatformLinkFlagsTemplate =
+ endif	# Compiler_GCC
+ endif	# AIX
+ 
++##################
++ifdef RTEMS 
++
++# Do not use dynamic libraries
++include $(BASE_OMNI_TREE)/mk/platforms/rtems_4.10.1.mk
++SharedLibraryPlatformLinkFlagsTemplate = $(CFLAGS) -Wl,-shared,-soname,$$soname
++
++BuildSharedLibrary = 0  
++#CXXOPTIONS	= -qstaticinline -qmaxmem=8192 -qnolongdoubleseq -qnolongdouble
++#COPTIONS	= -qmaxmem=8192 -qnolonglong -qnonlongdoubleonglong -qbolongdouble
++
++endif
++
+ ###################
+ ifdef Darwin
+ IMPORT_CPPFLAGS += -D__darwin__
+--- omniORB-4.1.4/mk/platforms/pc486_rtems_4.5.0.mk	2003-03-23 22:03:28.000000000 +0100
++++ omniORB-4.1.4/mk/platforms/pc486_rtems_4.5.0.mk	1970-01-01 01:00:00.000000000 +0100
+@@ -1,94 +0,0 @@
+-###########################################################################
+-#
+-# $Header: /cvsroot/omniorb/omni/mk/platforms/Attic/pc486_rtems_4.5.0.mk,v 1.4.2.1 2003/03/23 21:03:28 dgrisby Exp $
+-#
+-# Copyright (c) 1999-2000 ConnectTel, Inc. All Rights Reserved.
+-#  
+-# MODULE DESCRIPTION: pc486_rtems_4.5.0.mk 
+-# 
+-# Define variables and rules specific to OARcorp's RTEMS. This file is 
+-# BSP dependent. It should be modified to match the requirements of a 
+-# particular BSP.
+-#
+-#  by: Rosimildo da Silva:
+-#      rdasilva@connecttel.com
+-#      http://www.connecttel.com
+-#
+-# MODIFICATION/HISTORY:
+-#
+-# $Log: pc486_rtems_4.5.0.mk,v $
+-# Revision 1.4.2.1  2003/03/23 21:03:28  dgrisby
+-# Start of omniORB 4.1.x development branch.
+-#
+-# Revision 1.2.2.1  2000/08/21 13:31:49  sll
+-# Merged make rules update from omni3_develop
+-#
+-# Revision 1.1.4.2  2000/08/21 11:28:59  sll
+-# *** empty log message ***
+-#
+-# Revision 1.1.2.1  2000/08/17 15:37:51  sll
+-# Merged RTEMS port.
+-#
+-#
+-###########################################################################
+-
+-#
+-# make variables and rules specific to OARcorp's RTEMS
+-# This file is BSP dependent. It should be modified to match the requirements
+-# of a particular BSP.
+-#
+-
+-include $(THIS_IMPORT_TREE)/mk/rtems.mk
+-
+-#
+-# Default location of the omniORB2 configuration file.
+-#
+-CONFIG_DEFAULT_LOCATION = /etc/omniorb.cfg
+-
+-#
+-# Rules to create the executables for the BSP ==> PC386 
+-#
+-# This is necessary because RTEMS does not have a "real main()", and
+-# the entry point for the user, it is the init task. The init task,
+-# provided in the module rtems_init, does all network, and file system
+-# initialization, before calling the "cc_main()" user entry point.
+-IMPORT_CPPFLAGS += -D__x86__  -Dmain=cc_main
+-
+-#
+-# NOTE: This module has RTEMS configuration, and it needs to be
+-#       modified to match your target requirements, specially
+-#       all network settings.
+-#
+-RTEMS_MAIN_MODULE = $(TOP)/src/examples/rtems/rtems_init.cc
+-
+-
+-RELOCADDR       = 0x00100000
+-START16FILE     = $(PROJECT_RELEASE)/lib/start16.bin
+-START16ADDR     = 0x00097C00
+-HEADERADDR      = 0x00097E00
+-define CXXExecutable
+-(set -x; \
+- $(RM) $@.exe; \
+- $(CXXLINK) -o $@.exe $(CXXLINKOPTIONS) -Wl,-Ttext,$(RELOCADDR) \
+- $(IMPORT_LIBRARY_FLAGS) $(CXXFLAGS) $(RTEMS_MAIN_MODULE) \
+-    $(filter-out $(LibSuffixPattern),$^) $$libs; \
+- $(OBJCOPY) -O binary $@.exe $@.bin; \
+- $(PROJECT_TOOLS)/bin2boot -v $@.bt $(HEADERADDR) \
+-   $(START16FILE) $(START16ADDR) 0 $@.bin $(RELOCADDR) 0; \
+- $(NM) -g -n $@.exe > $@.num; \
+-)
+-endef
+-
+-define CExecutable
+-(set -x; \
+- $(RM) $@.exe; \
+- $(CLINK) $(RTEMS_MAIN_MODULE) -o $@.exe $(CLINKOPTIONS) -Wl,-Ttext,$(RELOCADDR) \
+- $(IMPORT_LIBRARY_FLAGS) $(CXXFLAGS) \
+-    $(filter-out $(LibSuffixPattern),$^) $$libs; \
+- $(OBJCOPY) -O binary $@.exe $@.bin; \
+- $(PROJECT_TOOLS)/bin2boot -v $@.bt $(HEADERADDR) \
+-   $(START16FILE) $(START16ADDR) 0 $@.bin $(RELOCADDR) 0; \
+- $(NM) -g -n $@.exe > $@.num; \
+-)
+-endef
+-
+--- omniORB-4.1.4/mk/platforms/rtems.mk	2003-03-23 22:03:28.000000000 +0100
++++ omniORB-4.1.4/mk/platforms/rtems.mk	1970-01-01 01:00:00.000000000 +0100
+@@ -1,317 +0,0 @@
+-###########################################################################
+-#
+-# $Header: /cvsroot/omniorb/omni/mk/platforms/Attic/rtems.mk,v 1.1.6.1 2003/03/23 21:03:28 dgrisby Exp $
+-#
+-# Copyright (c) 1999-2000 ConnectTel, Inc. All Rights Reserved.
+-#  
+-# MODULE DESCRIPTION: rtems.mk
+-# 
+-#  by: Rosimildo da Silva:
+-#      rdasilva@connecttel.com
+-#      http://www.connecttel.com
+-#
+-# MODIFICATION/HISTORY:
+-#
+-# $Log: rtems.mk,v $
+-# Revision 1.1.6.1  2003/03/23 21:03:28  dgrisby
+-# Start of omniORB 4.1.x development branch.
+-#
+-# Revision 1.1.4.2  2001/08/29 17:48:08  sll
+-# The rules to link the gatekeeper shared library are no longer needed.
+-#
+-# Revision 1.1.4.1  2000/08/21 13:31:49  sll
+-# Merged make rules update from omni3_develop
+-#
+-# Revision 1.1.2.1  2000/08/17 15:52:25  sll
+-# Merged RTEMS port.
+-#
+-# Revision 1.1.2.1  2000/08/17 15:37:51  sll
+-# Merged RTEMS port.
+-#
+-#
+-###########################################################################
+-
+-# TOOLSET -- configuration -- these macros needs to be localized to match
+-#            the locaction of the installation of your toolset on your host.
+-RTEMS_BUILD         = /opt/rtems
+-RTEMS_INSTALL_POINT = /opt/rtems
+-RTEMS_CC_PREFIX     = i386-rtems-
+-RTEMS_BSP           = pc486
+-PROJECT_RELEASE     = $(RTEMS_BUILD)/$(RTEMS_BSP)
+-PROJECT_TOOLS       = $(RTEMS_BUILD)/$(RTEMS_BSP)/build-tools
+-RTEMS               = 1
+-x86Processor        = 1
+-
+-# Define OrbCoreOnly if only want to build the runtime with no support 
+-# for dynamic interfaces, e.g. DII, DSI, Any, Typecode etc.
+-#OrbCoreOnly = 1
+-
+-# Define EmbeddedSystem causes the build process to only build src/lib.
+-#
+-EmbeddedSystem = 1
+-
+-# RTEMS uses similar make/build structure as Unix, so turn this on
+-UnixPlatform = 1
+-
+-#
+-# Global defines to build the ORB runtime libraries.
+-#
+-IMPORT_CPPFLAGS += -DPthreadDraftVersion=10 -DPthreadSupportThreadPriority \
+-                   -DThreadStackSize=4096*4
+-#Shouldn't these be put into OMNITHREAD_CPPFLAGS???
+-#
+-
+-# IMPORT_CPPFLAGS += -D__rtems__
+-# Is this necessary?
+-
+-
+-#
+-# The HOSTBINDIR variable is used to locate the HOST IDL compiler.
+-# This needs to be changed if your host it is NOT CygWin.
+-#
+-# NOTE: ******* >>> Please change this to match your host  <<< **************
+-#
+-HOSTBINDIR = bin/x86_win32
+-
+-
+-# BINDIR and LIBDIR contain the binaries and libraries of the target.
+-BINDIR     = bin/$(platform)
+-LIBDIR     = lib/$(platform)
+-#
+-# Under Windows, when Microsoft VC+compiler is used, extra flags needs 
+-# to be defined. Undefine this macro when compiling under an UNIX or LINUX host.
+-HOST_IDL_FLAGS = -h .hh -s SK.cc
+-
+-LibPattern=%lib.a
+-ThreadSystem=Posix
+-
+-CFLAGS = 
+-CPPFLAGS = 
+-DEFS = -DHAVE_CONFIG_H
+-LDFLAGS =
+-LIBS = 
+-CC_FOR_BUILD = gcc
+-
+-CC = 		   $(RTEMS_INSTALL_POINT)/bin/$(RTEMS_CC_PREFIX)gcc
+-AS = 		   $(RTEMS_INSTALL_POINT)/bin/$(RTEMS_CC_PREFIX)as
+-AR = 		   $(RTEMS_INSTALL_POINT)/bin/$(RTEMS_CC_PREFIX)ar
+-NM = 		   $(RTEMS_INSTALL_POINT)/bin/$(RTEMS_CC_PREFIX)nm
+-LD = 		   $(RTEMS_INSTALL_POINT)/bin/$(RTEMS_CC_PREFIX)ld
+-SIZE = 		$(RTEMS_INSTALL_POINT)/bin/$(RTEMS_CC_PREFIX)size
+-OBJCOPY = 	$(RTEMS_INSTALL_POINT)/bin/$(RTEMS_CC_PREFIX)objcopy
+-RANLIB = 	$(RTEMS_INSTALL_POINT)/bin/$(RTEMS_CC_PREFIX)ranlib
+-CXX =       $(RTEMS_INSTALL_POINT)/bin/$(RTEMS_CC_PREFIX)g++
+-
+-export CC
+-export AS
+-export LD
+-export NM
+-export AR
+-export SIZE
+-export OBJCOPY
+-export CXX
+-
+-
+-MKDIRHIER	= mkdir -p
+-INSTALL		= install -c
+-INSTLIBFLAGS	= -m 0644
+-INSTEXEFLAGS	= -m 0755
+-
+-CP		 = cp
+-MV		 = mv -f
+-CPP = $(RTEMS_INSTALL_POINT)/bin/cpp
+-CXXLINK  = $(RTEMS_INSTALL_POINT)/bin/$(RTEMS_CC_PREFIX)g+--pipe
+-CFLAGS = -O4 -Wall -Wno-unused -fasm -g \
+--B$(RTEMS_BUILD)/$(RTEMS_BSP)/lib/ -specs bsp_specs -qrtems $(IMPORT_CPPFLAGS) \
+-$(DIR_CPPFLAGS) -I$(RTEMS_BUILD)/$(RTEMS_BSP)/lib/include \
+--I$(RTEMS_BUILD)/$(RTEMS_BSP)/lib/include/networking \
+--I$(RTEMS_BUILD)/$(RTEMS_BSP)/lib/include/sys
+-
+-CXXFLAGS = $(CFLAGS)
+-
+-ARFLAGS  = -ruv
+-
+-OMKDEPEND = $(BASE_OMNI_TREE)/$(HOSTBINDIR)/omkdepend
+-
+-CXXMAKEDEPEND   = $(OMKDEPEND) -D__cplusplus -D__GNUG__ -D__GNUC__
+-CMAKEDEPEND     = $(OMKDEPEND) -D__GNUC__
+-
+-#
+-# General rules for cleaning.
+-#
+-
+-define CleanRule
+-$(RM) *.o *.a *.class *.num *.bt *.bin *.exe
+-endef
+-
+-define VeryCleanRule
+-$(RM) *.d
+-$(RM) $(CORBA_STUB_FILES)
+-endef
+-
+-#
+-# Patterns for various file types
+-#
+-
+-LibPattern = lib%.a
+-LibSuffixPattern = %.a
+-LibSearchPattern = -l%
+-BinPattern = %
+-TclScriptPattern = %
+-
+-
+-#
+-# Stuff to generate statically-linked libraries.
+-#
+-
+-define StaticLinkLibrary
+-(set -x; \
+- $(RM) $@; \
+- $(AR) $(ARFLAGS) $@ $^; \
+- $(RANLIB) $@; \
+-)
+-endef
+-
+-ifdef EXPORT_TREE
+-define ExportLibrary
+-(dir="$(EXPORT_TREE)/$(LIBDIR)"; \
+- files="$^"; \
+- for file in $$files; do \
+-   $(ExportFileToDir); \
+- done; \
+-)
+-endef
+-endif
+-
+-
+-#
+-# Stuff to generate executable binaries.
+-#
+-# These rules are used like this
+-#
+-# target: objs lib_depends
+-#         @(libs="libs"; $(...Executable))
+-#
+-# The command we want to generate is like this
+-#
+-# linker -o target ... objs libs
+-# i.e. we need to filter out the lib_depends from the command
+-#
+-
+-IMPORT_LIBRARY_FLAGS = $(patsubst %,-L%,$(IMPORT_LIBRARY_DIRS))
+-
+-ifdef EXPORT_TREE
+-define ExportExecutable
+-(dir="$(EXPORT_TREE)/$(BINDIR)"; \
+- files="$^"; \
+- for file in $$files; do \
+-   $(ExportExecutableFileToDir); \
+- done; \
+-)
+-endef
+-endif
+-
+-
+-OMNITHREAD_LIB = $(patsubst %,$(LibSearchPattern),omnithread)
+-lib_depend := $(patsubst %,$(LibPattern),omnithread)
+-OMNITHREAD_LIB_DEPEND := $(GENERATE_LIB_DEPEND)
+-
+-
+-#
+-# CORBA stuff
+-#
+-CorbaImplementation = OMNIORB
+-
+-OMNIORB_VERSION = 3.0.0
+-OMNIORB_MAJOR_VERSION = $(word 1,$(subst ., ,$(OMNIORB_VERSION)))
+-OMNIORB_MINOR_VERSION = $(word 2,$(subst ., ,$(OMNIORB_VERSION)))
+-OMNIORB_MICRO_VERSION = $(word 3,$(subst ., ,$(OMNIORB_VERSION)))
+-
+-lib_depend := $(patsubst %,$(LibPattern),omniORB$(OMNIORB_MAJOR_VERSION))
+-omniORB_lib_depend := $(GENERATE_LIB_DEPEND)
+-lib_depend := $(patsubst %,$(LibPattern),omniDynamic$(OMNIORB_MAJOR_VERSION))
+-omniDynamic_lib_depend := $(GENERATE_LIB_DEPEND)
+-
+-OMNIORB_IDL_ONLY = $(BASE_OMNI_TREE)/$(BINDIR)/omniidl -bcxx
+-ifndef OrbCoreOnly
+-OMNIORB_IDL_ANY_FLAGS = -Wba
+-endif
+-OMNIORB_IDL = $(OMNIORB_IDL_ONLY) $(OMNIORB_IDL_ANY_FLAGS)
+-OMNIORB_CPPFLAGS = -D__OMNIORB$(OMNIORB_MAJOR_VERSION)__ -I$(CORBA_STUB_DIR) $(OMNITHREAD_CPPFLAGS)
+-
+-OMNIORB_LIB_NODYN = $(patsubst %,$(LibSearchPattern),omniORB$(OMNIORB_MAJOR_VERSION))
+-ifdef OrbCoreOnly
+-OMNIORB_LIB = $(OMNIORB_LIB_NODYN)
+-else
+-OMNIORB_LIB = $(OMNIORB_LIB_NODYN) \
+-       $(patsubst %,$(LibSearchPattern),omniDynamic$(OMNIORB_MAJOR_VERSION))
+-endif
+-
+-OMNIORB_LIB_NODYN_DEPEND = $(omniORB_lib_depend)
+-OMNIORB_LIB_DEPEND = $(omniORB_lib_depend) $(omniDynamic_lib_depend)
+-
+-OMNIORB_STATIC_STUB_OBJS = \
+-	$(CORBA_INTERFACES:%=$(CORBA_STUB_DIR)/%SK.o)
+-OMNIORB_STATIC_STUB_SRCS = \
+-	$(CORBA_INTERFACES:%=$(CORBA_STUB_DIR)/%SK.cc)
+-OMNIORB_DYN_STUB_OBJS = \
+-	$(CORBA_INTERFACES:%=$(CORBA_STUB_DIR)/%DynSK.o)
+-OMNIORB_DYN_STUB_SRCS = \
+-	$(CORBA_INTERFACES:%=$(CORBA_STUB_DIR)/%DynSK.cc)
+-
+-OMNIORB_STUB_SRCS = $(OMNIORB_STATIC_STUB_SRCS) $(OMNIORB_DYN_STUB_SRCS)
+-OMNIORB_STUB_OBJS = $(OMNIORB_STATIC_STUB_OBJS) $(OMNIORB_DYN_STUB_OBJS)
+-
+-OMNIORB_STUB_SRC_PATTERN = $(CORBA_STUB_DIR)/%SK.cc
+-OMNIORB_STUB_OBJ_PATTERN = $(CORBA_STUB_DIR)/%SK.o
+-OMNIORB_DYN_STUB_SRC_PATTERN = $(CORBA_STUB_DIR)/%DynSK.cc
+-OMNIORB_DYN_STUB_OBJ_PATTERN = $(CORBA_STUB_DIR)/%DynSK.o
+-OMNIORB_STUB_HDR_PATTERN = $(CORBA_STUB_DIR)/%.hh
+-
+-
+-# omniORB access control policy modules
+-
+-OMNIORB_DUMMYGK_LIB = $(patsubst %,$(LibSearchPattern),omniGK_stub)
+-lib_depend := $(patsubst %,$(LibPattern),omniGK_stub)
+-OMNIORB_DUMMYGK_LIB_DEPEND := $(GENERATE_LIB_DEPEND)
+-
+-OMNIORB_TCPWRAPGK_LIB = $(patsubst %,$(LibSearchPattern),tcpwrapGK)
+-lib_depend := $(patsubst %,$(LibPattern),tcpwrapGK)
+-OMNIORB_TCPWRAPGK_LIB_DEPEND := $(GENERATE_LIB_DEPEND)
+-
+-
+-# thread libraries required by omniORB. Make sure this is the last in
+-# the list of omniORB related libraries
+-
+-OMNIORB_LIB += $(OMNITHREAD_LIB) $(SOCKET_LIB)
+-OMNIORB_LIB_NODYN += $(OMNITHREAD_LIB) $(SOCKET_LIB)
+-OMNIORB_LIB_DEPEND += $(OMNITHREAD_LIB_DEPEND)
+-OMNIORB_LIB_NODYN_DEPEND += $(OMNITHREAD_LIB_DEPEND)
+-
+-# LifeCycle stuff
+-
+-OMNIORB_IDL_LC_FLAGS = -l
+-OMNIORB_LC_LIB = $(patsubst %,$(LibSearchPattern),omniLC)
+-
+-# Pattern rules to build  objects files for static.
+-# The convention is to build the static library in the subdirectoy "static"
+-# The pattern rules below ensured that the right compiler flags are used
+-# to compile the source for the library.
+-
+-static/%.o: %.cc
+-	$(CXX) -c $(CXXFLAGS) -o $@ $<
+-
+-static/%.o: %.c
+-	$(CC) -c $(CFLAGS) -o $@ $<
+-
+-#
+-# Replacements for implicit rules
+-#
+-
+-%.o: %.c
+-	$(CC) -c $(CFLAGS) -o $@ $<
+-
+-%.o: %.cc
+-	$(CXX) -c $(CXXFLAGS) -o $@ $<
+-
+-
+--- omniORB-4.1.4/mk/platforms/rtems_4.10.1.mk	1970-01-01 01:00:00.000000000 +0100
++++ omniORB-4.1.4/mk/platforms/rtems_4.10.1.mk	2011-10-09 14:43:39.532370044 +0200
+@@ -0,0 +1,94 @@
++###########################################################################
++#
++# $Header: 
++#
++# MODULE DESCRIPTION: rtems_4.10.1.mk 
++# 
++# Define variables and rules specific to OARcorp's RTEMS. This file is 
++# BSP dependent. It should be modified to match the requirements of a 
++# particular BSP.
++#
++#  based on pc486_rtems_4.5.0.mk by: Rosimildo da Silva:
++#      rdasilva@connecttel.com
++#      http://www.connecttel.com
++#
++#
++###########################################################################
++
++#
++# make variables and rules specific to OARcorp's RTEMS
++# This file is BSP dependent. It should be modified to match the requirements
++# of a particular BSP.
++#
++
++include $(THIS_IMPORT_TREE)/mk/rtems.mk
++
++#
++# Default location of the omniORB2 configuration file.
++#
++CONFIG_DEFAULT_LOCATION = /etc/omniorb.cfg
++
++# This is necessary because RTEMS does not have a "real main()", and
++# the entry point for the user, it is the init task. The init task,
++# provided in the module rtems_init, does all network, and file system
++# initialization, before calling the "cc_main()" user entry point.
++IMPORT_CPPFLAGS += -D__$(ARCH)__  -Dmain=cc_main
++
++#
++# NOTE: This module has RTEMS configuration, and it needs to be
++#       modified to match your target requirements, specially
++#       all network settings.
++#
++RTEMS_MAIN_MODULE = $(TOP)/src/examples/rtems/rtems_init.cc
++
++
++ifeq ($(ARCH),x86)
++   RELOCADDR       = 0x00100000
++   START16FILE     = $(PROJECT_RELEASE)/lib/start16.bin
++   START16ADDR     = 0x00097C00
++   HEADERADDR      = 0x00097E00
++
++   define CXXExecutable
++   (set -x; \
++    $(RM) $@.exe; \
++    $(CXXLINK) -o $@.exe $(CXXLINKOPTIONS) -Wl,-Ttext,$(RELOCADDR) \
++    $(IMPORT_LIBRARY_FLAGS) $(CXXFLAGS) $(RTEMS_MAIN_MODULE) \
++       $(filter-out $(LibSuffixPattern),$^) $$libs; \
++    $(OBJCOPY) -O binary $@.exe $@.bin; \
++    $(PROJECT_TOOLS)/bin2boot -v $@.bt $(HEADERADDR) \
++      $(START16FILE) $(START16ADDR) 0 $@.bin $(RELOCADDR) 0; \
++    $(NM) -g -n $@.exe > $@.num; \
++   )
++   endef
++   
++   define CExecutable
++   (set -x; \
++    $(RM) $@.exe; \
++    $(CLINK) $(RTEMS_MAIN_MODULE) -o $@.exe $(CLINKOPTIONS) -Wl,-Ttext,$(RELOCADDR) \
++    $(IMPORT_LIBRARY_FLAGS) $(CXXFLAGS) \
++       $(filter-out $(LibSuffixPattern),$^) $$libs; \
++    $(OBJCOPY) -O binary $@.exe $@.bin; \
++    $(PROJECT_TOOLS)/bin2boot -v $@.bt $(HEADERADDR) \
++      $(START16FILE) $(START16ADDR) 0 $@.bin $(RELOCADDR) 0; \
++    $(NM) -g -n $@.exe > $@.num; \
++   )
++   endef
++else
++   define CXXExecutable
++   (set -x; \
++    $(RM) $@.exe; \
++    $(CXXLINK) -o $@.exe $(CXXLINKOPTIONS) \
++    $(IMPORT_LIBRARY_FLAGS) $(CXXFLAGS) $(RTEMS_MAIN_MODULE) \
++       $(filter-out $(LibSuffixPattern),$^) $$libs; \
++   )
++   endef
++   
++   define CExecutable
++   (set -x; \
++    $(RM) $@.exe; \
++    $(CLINK) $(RTEMS_MAIN_MODULE) -o $@.exe $(CLINKOPTIONS) \
++    $(IMPORT_LIBRARY_FLAGS) $(CXXFLAGS) \
++       $(filter-out $(LibSuffixPattern),$^) $$libs; \
++   )
++   endef
++endif
+--- omniORB-4.1.4/mk/rtems.mk	2005-03-31 01:36:14.000000000 +0200
++++ omniORB-4.1.4/mk/rtems.mk	2011-10-09 14:38:34.169069982 +0200
+@@ -49,14 +49,13 @@
+ 
+ # TOOLSET -- configuration -- these macros needs to be localized to match
+ #            the locaction of the installation of your toolset on your host.
+-RTEMS_BUILD         = /opt/rtems
+-RTEMS_INSTALL_POINT = /opt/rtems
+-RTEMS_CC_PREFIX     = i386-rtems-
+-RTEMS_BSP           = pc486
++RTEMS_BUILD         = $(RTEMS_INSTALL_DIR)/${TARGET}
++RTEMS_INSTALL_POINT = $(RTEMS_INSTALL_DIR)
++RTEMS_CC_PREFIX     = ${TARGET}-
++RTEMS_BSP           = ${BSP}
+ PROJECT_RELEASE     = $(RTEMS_BUILD)/$(RTEMS_BSP)
+ PROJECT_TOOLS       = $(RTEMS_BUILD)/$(RTEMS_BSP)/build-tools
+ RTEMS               = 1
+-x86Processor        = 1
+ 
+ # Define OrbCoreOnly if only want to build the runtime with no support 
+ # for dynamic interfaces, e.g. DII, DSI, Any, Typecode etc.
+@@ -75,9 +74,7 @@ NoGateKeeper = 1
+ #
+ # Global defines to build the ORB runtime libraries.
+ #
+-# IMPORT_CPPFLAGS += -D__rtems__
+-# Not necessary because __rtems__ is builtin to the cross compiler
+-
++IMPORT_CPPFLAGS += -D__rtems__
+ 
+ #
+ OMNITHREAD_CPPFLAGS += -DPthreadDraftVersion=10 -DPthreadSupportThreadPriority \
+@@ -85,11 +82,9 @@ OMNITHREAD_CPPFLAGS += -DPthreadDraftVer
+ 
+ #
+ # The HOSTBINDIR variable is used to locate the HOST IDL compiler.
+-# This needs to be changed if your host it is NOT CygWin.
+-#
+ # NOTE: ******* >>> Please change this to match your host  <<< **************
+ #
+-HOSTBINDIR = bin/x86_win32
++HOSTBINDIR = $(INSTALL_PREFIX)/omniORB/bin
+ 
+ 
+ # BINDIR and LIBDIR contain the binaries and libraries of the target.
+@@ -145,11 +140,11 @@ $(DIR_CPPFLAGS) -I$(RTEMS_BUILD)/$(RTEMS
+ -I$(RTEMS_BUILD)/$(RTEMS_BSP)/lib/include/networking \
+ -I$(RTEMS_BUILD)/$(RTEMS_BSP)/lib/include/sys
+ 
+-CXXFLAGS = $(CFLAGS)
++CXXFLAGS = $(CFLAGS) -fpermissive
+ 
+ ARFLAGS  = -ruv
+ 
+-OMKDEPEND = $(BASE_OMNI_TREE)/$(HOSTBINDIR)/omkdepend
++OMKDEPEND = $(HOSTBINDIR)/omkdepend
+ 
+ CXXMAKEDEPEND   = $(OMKDEPEND) -D__cplusplus -D__GNUG__ -D__GNUC__
+ CMAKEDEPEND     = $(OMKDEPEND) -D__GNUC__
+@@ -247,7 +242,7 @@ omniORB_lib_depend := $(GENERATE_LIB_DEP
+ lib_depend := $(patsubst %,$(LibPattern),omniDynamic$(OMNIORB_MAJOR_VERSION))
+ omniDynamic_lib_depend := $(GENERATE_LIB_DEPEND)
+ 
+-OMNIORB_IDL_ONLY = $(BASE_OMNI_TREE)/$(BINDIR)/omniidl -bcxx
++OMNIORB_IDL_ONLY = $(BINDIR)/omniidl -bcxx
+ ifndef OrbCoreOnly
+ OMNIORB_IDL_ANY_FLAGS = -Wba
+ endif
+--- omniORB-4.1.4/src/lib/omniORB/dynamic/context.cc	2009-05-06 18:15:58.000000000 +0200
++++ omniORB-4.1.4/src/lib/omniORB/dynamic/context.cc	2011-10-09 14:24:18.244023290 +0200
+@@ -125,6 +125,7 @@
+ #endif
+ 
+ #include <context.h>
++#include <strings.h>
+ #include <pseudo.h>
+ #include <exceptiondefs.h>
+ 
+--- omniORB-4.1.4/src/lib/omniORB/orbcore/objectAdapter.cc	2009-05-06 18:15:02.000000000 +0200
++++ omniORB-4.1.4/src/lib/omniORB/orbcore/objectAdapter.cc	2011-10-09 14:24:18.248022801 +0200
+@@ -179,6 +179,7 @@
+ 
+ #include <stdlib.h>
+ #include <stdio.h>
++#include <strings.h>
+ #include <ctype.h>
+ 
+ OMNI_NAMESPACE_BEGIN(omni)
+--- omniORB-4.1.4/src/lib/omniORB/orbcore/transportRules.cc	2009-07-02 10:53:11.000000000 +0200
++++ omniORB-4.1.4/src/lib/omniORB/orbcore/transportRules.cc	2011-10-09 14:24:18.248022801 +0200
+@@ -99,6 +99,7 @@
+ #include <libcWrapper.h>
+ #include <omniORB4/giopEndpoint.h>
+ #include <stdio.h>
++#include <strings.h>
+ #include <stdlib.h>
+ #include <ctype.h>
+ 
+--- omniORB-4.1.4/src/lib/omnithread/posix.cc	2009-05-06 18:14:42.000000000 +0200
++++ omniORB-4.1.4/src/lib/omnithread/posix.cc	2011-10-09 14:24:18.248022801 +0200
+@@ -95,6 +95,13 @@
+ #endif
+ #endif
+ 
++#if defined(__rtems__) && defined(PthreadSupportThreadPriority)
++#if _POSIX_THREAD_PRIORITY_SCHEDULING
++#include <sys/time.h>
++#include <sched.h>
++#endif
++#endif
++
+ #define DB(x) // x
+ //#include <iostream.h> or #include <iostream> if DB is on.
+ 
