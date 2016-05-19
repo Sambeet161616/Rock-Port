@@ -1,5 +1,5 @@
-export BUILD_PREFIX=/home/anita/rock/x86/build/
-export INSTALL_PREFIX=/home/anita/rock/x86/install/
+export BUILD_PREFIX=/home/sambeet/NewRockPort/x86/Build/
+export INSTALL_PREFIX=/home/sambeet/NewRockPort/x86/Install/
 
 #LEON2 target
 #export TARGET=sparc-rtems

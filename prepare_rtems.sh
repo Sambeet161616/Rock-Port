@@ -11,7 +11,7 @@ GCC_GPP_URL=http://ftp.gnu.org/gnu/gcc/gcc-${GCC_VER}/gcc-g++-${GCC_VER}.tar.gz
 GCC_DIR=${BUILD_PREFIX}/rtems/gcc-${GCC_VER}
 
 NEWLIB_PKG=${BUILD_PREFIX}/pkgs/newlib-${NEWLIB_VER}.tar.gz
-NEWLIB_URL=ftp://sources.redhat.com/pub/newlib/newlib-${NEWLIB_VER}.tar.gz
+NEWLIB_URL=ftp://sourceware.org/pub/newlib/newlib-${NEWLIB_VER}.tar.gz
 NEWLIB_PATCH=${BUILD_PREFIX}/pkgs/newlib-1.18.0-rtems4.10-20110518.diff
 NEWLIB_PATCH_URL=http://www.rtems.com/ftp/pub/rtems/SOURCES/4.10/newlib-1.18.0-rtems4.10-20110518.diff
 NEWLIB_PATCH2=${BUILD_PREFIX}/scripts/files/newlib-${NEWLIB_VER}.patch
