@@ -6,7 +6,7 @@ PREFIX        = ${INSTALL_PREFIX}/rtems
 BIN           = $(PREFIX)/bin
 EXPORT_PATH   = export PATH=$(BIN):$(PATH)
 TMPDIR_EXTRA  = tmp-
-include ${BUILD_PREFIX}/scripts/files/rtems_ver
+include ${BUILD_PREFIX}/Rock-Port_ana/files/rtems_ver
 
 ######################################################################
 
