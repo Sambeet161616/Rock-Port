@@ -1,0 +1,30 @@
+#####################################################################################################################
+#Directory where rtems will be installed
+PREFIX=${INSTALL_PREFIX}/rtems
+EXPORT_PATH=export PATH=${PREFIX}/bin:${PATH}
+LOG=logfile-
+
+#####################################################################################################################
+all:build-rsb\
+	build-rtems
+#####################################################################################################################
+build-rtems:build-rsb
+		EXPORT_PATH;\
+		../rtems-${RTEMS_VER}.0-rc1/configure --target=${TARGET}\
+		--disable-posix \
+		--enable-networking \
+		--disable-cxx \
+		--enable-rtemsbsp=${BSP} \
+		--prefix=${PREFIX}/${RTEMS_VER} \
+		2>&1 | tee compile-rtems-configure.out
+			
+build-rsb:
+		pwd;
+		cd rtems-source-builder-${RTEMS_VER}.0-rc1;\
+		../source-builder/sb-set-builder \
+		prefix=${PREFIX}/${RTEMS_VER}.0-rc1 ${RTEMS_VER}/${TARGET} \
+		2>&1 | tee compile-rsb.out
+
+#####################################################################################################################
+
+

@@ -92,4 +92,4 @@ if ! [ -e ${GCC_DIR}/newlib ]; then
 fi
 
 cd ${BUILD_PREFIX}/rtems/
-make build-binutils && make build-gcc && make build-gdb && make build-rtems
+make build-binutils && make build-gcc && make build-gdb && make build-rtems && make clean

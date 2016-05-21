@@ -16,7 +16,6 @@ all: build-binutils \
    build-gdb
 
 clean: binutils-clean \
-     rtems-clean \
      gcc-clean \
      gdb-clean
 
@@ -118,7 +117,7 @@ rtems-dir:
 
 rtems-configure: rtems-dir
 	cd $(TMPDIR_EXTRA)rtems-$(RTEMS_VER); $(EXPORT_PATH); \
-	../rtems-$(RTEMS_VER)/configure \
+	../rtems-$(RTEMS_VER).0-rc1/configure \
 	--target=$(TARGET) \
 	--prefix=$(PREFIX)  \
 	--enable-networking \
@@ -135,7 +134,5 @@ rtems-install: rtems-dir
 	cd $(TMPDIR_EXTRA)rtems-$(RTEMS_VER); $(EXPORT_PATH);  \
 	make install RTEMS_BSP=$(BSP) 2>&1 | tee compile-rtems-install.out
 
-rtems-clean:
-	rm -rf $(TMPDIR_EXTRA)rtems-$(RTEMS_VER)
 
 ######################################################################
