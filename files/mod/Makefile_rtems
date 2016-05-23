@@ -2,21 +2,31 @@
 #Directory where rtems will be installed
 PREFIX=$(INSTALL_PREFIX)/rtems
 EXPORT_PATH=export PATH=$(PREFIX)/bin:${PATH}
-LOG=logfile-
+TEMP=temp-
 include ${BUILD_PREFIX}/Rock-Port_ana/files/RTEMS_mod_ver
 #####################################################################################################################
-all:build-rsb\
-	build-rtems
+all:configure-rtems\
+	compile-rtems
 #####################################################################################################################
-build-rtems:build-rsb
-		EXPORT_PATH;\
+rtems-dir:
+		if [ ! -d $(TEMP)rtems-$(RTEMS_VER) ] ; then mkdir $(TEMP)rtems-$(RTEMS_VER); fi
+
+configure-rtems:rtems-dir
+		cd $(TEMP)rtems-$(RTEMS_VER);\
+		$(EXPORT_PATH);\
 		../rtems-$(RTEMS_VER).0-rc1/configure --target=$(TARGET)\
 		--disable-posix \
 		--enable-networking \
 		--disable-cxx \
 		--enable-rtemsbsp=$(BSP) \
-		--prefix=$(PREFIX)/$(RTEMS_VER) \
-		2>&1 | tee compile-rtems-configure.out
+		--prefix=$(PREFIX)/$(RTEMS_VER); \
+
+compile-rtems:rtems-dir
+		cd $(TEMP)rtems-$(RTEMS_VER);\
+		$(EXPORT_PATH);\
+		make all
+		
+		
 			
 build-rsb:
 		cd rtems-source-builder-$(RTEMS_VER).0-rc1/rtems;\
