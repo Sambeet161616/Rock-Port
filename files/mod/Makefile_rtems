@@ -1,37 +1,45 @@
 #####################################################################################################################
 #Directory where rtems will be installed
 PREFIX=$(INSTALL_PREFIX)/rtems
-EXPORT_PATH=export PATH=$(PREFIX)/bin:${PATH}
+EXPORT_PATH=export PATH=$(PREFIX)/$(RTEMS_VER)$(RC)/bin:${PATH}
 TEMP=temp-
 include ${BUILD_PREFIX}/Rock-Port_ana/files/RTEMS_mod_ver
 #####################################################################################################################
-all:configure-rtems\
-	compile-rtems
+all:build-rsb\
+	configure-rtems\
+	compile-rtems\
+	install-rtems
 #####################################################################################################################
 rtems-dir:
-		if [ ! -d $(TEMP)rtems-$(RTEMS_VER) ] ; then mkdir $(TEMP)rtems-$(RTEMS_VER); fi
+		if [ ! -d $(TEMP)rtems-$(RTEMS_VER)$(RC) ] ; then mkdir $(TEMP)rtems-$(RTEMS_VER)$(RC); fi
 
 configure-rtems:rtems-dir
-		cd $(TEMP)rtems-$(RTEMS_VER);\
+		cd $(TEMP)rtems-$(RTEMS_VER)$(RC);\
 		$(EXPORT_PATH);\
-		../rtems-$(RTEMS_VER).0-rc1/configure --target=$(TARGET)\
+		../rtems-$(RTEMS_VER)$(RC)/configure --target=$(TARGET)\
 		--disable-posix \
 		--enable-networking \
 		--disable-cxx \
 		--enable-rtemsbsp=$(BSP) \
-		--prefix=$(PREFIX)/$(RTEMS_VER); \
+		--prefix=$(PREFIX)/$(RTEMS_VER) 2>&1 | tee compile-rtems-configure.out
+
 
 compile-rtems:rtems-dir
 		cd $(TEMP)rtems-$(RTEMS_VER);\
 		$(EXPORT_PATH);\
-		make all
-		
-		
+		make all 2>&1 | tee compile-rtems-make.out
+
+
+install-rtems:rtems-dir
+		cd $(TEMP)rtems-$(RTEMS_VER);\
+		$(EXPORT_PATH);\
+		make install 2>&1 | tee compile-rtems-install.out
+
 			
 build-rsb:
-		cd rtems-source-builder-$(RTEMS_VER).0-rc1/rtems;\
+		cd rtems-source-builder-$(RTEMS_VER)$(RC)/rtems;\
 		../source-builder/sb-set-builder \
-		--prefix=$(PREFIX)/$(RTEMS_VER).0-rc1 $(RTEMS_VER)/$(RSB_SB) \
+		--prefix=$(PREFIX)/$(RTEMS_VER)$(RC) $(RTEMS_VER)/$(RSB_SB) \
 		2>&1 | tee compile-rsb.out
 
 #####################################################################################################################

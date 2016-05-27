@@ -1,2 +1,3 @@
 RTEMS_VER=4.11
 RSB_SB=rtems-i386
+RC=.0-rc3

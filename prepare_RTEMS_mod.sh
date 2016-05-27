@@ -7,13 +7,13 @@ if ! [ -e ${BUILD_PREFIX}/rtems/ ]; then
    mkdir ${BUILD_PREFIX}/rtems/
 fi
 
-RSB_PKG=${BUILD_PREFIX}/pkgs/rtems-source-builder-${RTEMS_VER}.0-rc1.tar.xz
-RSB_URL=https://ftp.rtems.org/pub/rtems/releases/${RTEMS_VER}/${RTEMS_VER}.0-rc1/rtems-source-builder-${RTEMS_VER}.0-rc1.tar.xz
-RSB_DIR=${BUILD_PREFIX}/rtems/rtems-source-builder-${RTEMS_VER}.0-rc1
+RSB_PKG=${BUILD_PREFIX}/pkgs/rtems-source-builder-${RTEMS_VER}${RC}.tar.xz
+RSB_URL=https://ftp.rtems.org/pub/rtems/releases/${RTEMS_VER}/${RTEMS_VER}${RC}/rtems-source-builder-${RTEMS_VER}${RC}.tar.xz
+RSB_DIR=${BUILD_PREFIX}/rtems/rtems-source-builder-${RTEMS_VER}${RC}
 
-RTEMS_PKG=${BUILD_PREFIX}/pkgs/rtems-${RTEMS_VER}.0-rc1.tar.xz
-RTEMS_URL=http://ftp.rtems.org/pub/rtems/releases/${RTEMS_VER}/${RTEMS_VER}.0-rc1/rtems-${RTEMS_VER}.0-rc1.tar.xz
-RTEMS_DIR=${BUILD_PREFIX}/rtems/rtems-${RTEMS_VER}.0-rc1
+RTEMS_PKG=${BUILD_PREFIX}/pkgs/rtems-${RTEMS_VER}${RC}.tar.xz
+RTEMS_URL=http://ftp.rtems.org/pub/rtems/releases/${RTEMS_VER}/${RTEMS_VER}${RC}/rtems-${RTEMS_VER}${RC}.tar.xz
+RTEMS_DIR=${BUILD_PREFIX}/rtems/rtems-${RTEMS_VER}${RC}
 
 if ! [ -e ${RSB_PKG} ]; then
    echo; echo "${RSB_PKG} not found. Downloading..."; echo
@@ -44,10 +44,5 @@ fi
 
 make all
 
-
-
-
-
-
-
+echo "RTEMS Prepared"
 
