@@ -39,7 +39,7 @@ if ! [ -d ${RTEMS_DIR} ]; then
 fi
 
 if ! [ -e ${BUILD_PREFIX}/rtems/Makefile ]; then
-   cp ${BUILD_PREFIX}/Rock-Port_ana/files/mod/Makefile_rtems ${BUILD_PREFIX}/rtems/Makefile
+   cp ${BUILD_PREFIX}/Rock-Port_ana/files/Makefile_rtems ${BUILD_PREFIX}/rtems/Makefile
 fi
 
 make all

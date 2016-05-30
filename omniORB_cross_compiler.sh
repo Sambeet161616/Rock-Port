@@ -14,7 +14,7 @@ if ! [ -d ${OMNIORB_DIR} ]; then
    tar xfz ${OMNIORB_PKG}
 
    echo; echo "Applying patches"
-   patch -p0 -i ${BUILD_PREFIX}/scripts/files/omniORB-${OMNIORB_VER}.patch
+   patch -p0 -i ${BUILD_PREFIX}/Rock-Port_ana/files/omniORB-${OMNIORB_VER}.patch
 
    cd ${OMNIORB_DIR}
 else

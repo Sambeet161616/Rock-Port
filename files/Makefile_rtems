@@ -2,7 +2,7 @@
 #Directory where rtems will be installed
 PREFIX=$(INSTALL_PREFIX)/rtems
 EXPORT_PATH=export PATH=$(PREFIX)/$(RTEMS_VER)$(RC)/bin:${PATH}
-TEMP=temp-
+TOOLS=TOOLS-
 include ${BUILD_PREFIX}/Rock-Port_ana/files/RTEMS_mod_ver
 #####################################################################################################################
 all:build-rsb\
@@ -11,10 +11,10 @@ all:build-rsb\
 	install-rtems
 #####################################################################################################################
 rtems-dir:
-		if [ ! -d $(TEMP)rtems-$(RTEMS_VER)$(RC) ] ; then mkdir $(TEMP)rtems-$(RTEMS_VER)$(RC); fi
+		if [ ! -d $(TOOLS)rtems-$(RTEMS_VER)$(RC) ] ; then mkdir $(TOOLS)rtems-$(RTEMS_VER)$(RC); fi
 
 configure-rtems:rtems-dir
-		cd $(TEMP)rtems-$(RTEMS_VER)$(RC);\
+		cd $(TOOLS)rtems-$(RTEMS_VER)$(RC);\
 		$(EXPORT_PATH);\
 		../rtems-$(RTEMS_VER)$(RC)/configure --target=$(TARGET)\
 		--disable-posix \
@@ -25,13 +25,13 @@ configure-rtems:rtems-dir
 
 
 compile-rtems:rtems-dir
-		cd $(TEMP)rtems-$(RTEMS_VER);\
+		cd $(TOOLS)rtems-$(RTEMS_VER)$(RC);\
 		$(EXPORT_PATH);\
 		make all 2>&1 | tee compile-rtems-make.out
 
 
 install-rtems:rtems-dir
-		cd $(TEMP)rtems-$(RTEMS_VER);\
+		cd $(TOOLS)rtems-$(RTEMS_VER)$(RC);\
 		$(EXPORT_PATH);\
 		make install 2>&1 | tee compile-rtems-install.out
 
