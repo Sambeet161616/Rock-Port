@@ -1,0 +1,27 @@
+--- ../CMakeLists.txt	2016-06-13 03:02:53.670712539 +0530
++++ ../patchstudy/CMakeLists_study.txt	2016-06-17 04:53:37.586629928 +0530
+@@ -19,6 +19,15 @@
+ #                                                 #
+ ###################################################
+ 
++SET( OROCOS_TARGET $ENV{OROCOS_TARGET}) 
++#Before create project to set cxx compiler
++set (CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/config") 
++                                                       
++IF ( NOT CMAKE_BUILD_TYPE STREQUAL "rtems") 
++  FIND_PACKAGE(RTEMS REQUIRED)               
++ENDIF ( NOT CMAKE_BUILD_TYPE STREQUAL "rtems")
++ 
++
+ PROJECT(orocos-rtt)
+ 
+ 
+@@ -28,6 +37,8 @@
+ LIST( GET RTT_VERSIONS 1 RTT_VERSION_MINOR)
+ LIST( GET RTT_VERSIONS 2 RTT_VERSION_PATCH)
+ 
++SET(ROS_ROOT $ENV{ROS_ROOT}) #Don't know why is this there
++
+ MESSAGE( "Orocos RTT version ${VERSION} (${RTT_VERSION_MAJOR}.${RTT_VERSION_MINOR}.${RTT_VERSION_PATCH})" )
+ 
+ SET( PROJ_SOURCE_DIR ${orocos-rtt_SOURCE_DIR} )

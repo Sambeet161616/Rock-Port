@@ -1,9 +1,9 @@
 --- rock/tools/rtt/CMakeLists.txt	2011-09-10 19:52:15.000000000 +0200
 +++ rock/tools/rtt/CMakeLists.txt	2011-10-06 23:57:04.921107001 +0200
-@@ -13,6 +13,15 @@ ENDIF(COMMAND cmake_policy AND ${CMAKE_M
+@@ -14,6 +14,15 @@ ENDIF(COMMAND cmake_policy AND ${CMAKE_M
  #       Start project customization section       #
  #                                                 #
- ###################################################
+ ####################################################
 +#bug
 +#http://www.orocos.org/forum/rtt/rtt-dev/bug-826-new-detection-orocostarget-environment-variable-fails
 +SET( OROCOS_TARGET $ENV{OROCOS_TARGET}) 
@@ -16,7 +16,7 @@
  
  PROJECT(orocos-rtt)
  
-@@ -23,7 +32,6 @@ LIST( GET RTT_VERSIONS 1 RTT_VERSION_MIN
+@@ -29,7 +32,6 @@ LIST( GET RTT_VERSIONS 1 RTT_VERSION_MIN
  LIST( GET RTT_VERSIONS 2 RTT_VERSION_PATCH)
  
  SET(ROS_ROOT $ENV{ROS_ROOT})

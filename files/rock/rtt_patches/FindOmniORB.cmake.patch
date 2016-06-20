@@ -1,0 +1,11 @@
+--- ../config/FindOmniORB.cmake	2016-06-18 04:59:19.280974539 +0530
++++ ../patchstudy/FindOmniORB_study.cmake	2016-06-18 04:57:38.404978782 +0530
+@@ -17,7 +17,7 @@
+ # compilation or because you installed it in an "unusual" directory).
+ # Just set OMNIORB4_DIR it to your specific installation directory
+ #
+-
++SET (OMNIORB4_DIR $ENV{OMNIORB4_DIR})
+ FIND_PATH( OMNIORB4_INCLUDE_DIR omniORB4/CORBA.h
+   PATHS
+   ${OMNIORB4_DIR}/include
