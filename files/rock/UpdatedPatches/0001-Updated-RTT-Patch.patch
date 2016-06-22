@@ -1,0 +1,690 @@
+From fef90c6034d52373ae8bef62b61d8a9773db03a4 Mon Sep 17 00:00:00 2001
+From: Sambeet161616 <b313036@iiit-bh.ac.in>
+Date: Thu, 23 Jun 2016 05:09:31 +0530
+Subject: [PATCH] Updated RTT Patch
+
+---
+ CMakeLists.txt                                  | 11 ++++
+ UseOROCOS-RTT.cmake                             | 19 +++++--
+ config/FindOmniORB.cmake                        |  1 +
+ config/check_depend.cmake                       | 32 +++++++++++
+ config/rtt_macros.cmake                         | 72 ++++++++++++++-----------
+ debian/liborocos-rtt-corba-template-dev.install |  4 +-
+ debian/liborocos-rtt-corba-template.install     |  4 +-
+ debian/liborocos-rtt-template-dev.install       | 12 ++---
+ debian/liborocos-rtt-template.install           | 12 ++---
+ orocos-rtt-config.cmake                         | 16 ++++--
+ orocos-rtt.default.cmake                        |  4 +-
+ rtt/CMakeLists.txt                              | 19 ++++---
+ rtt/os/CMakeLists.txt                           |  2 +
+ rtt/os/fosi.h                                   |  4 ++
+ rtt/os/oro_arch.h                               |  2 +
+ rtt/plugin/PluginLoader.cpp                     |  4 ++
+ rtt/rtt-config.h.in                             |  2 +
+ rtt/transports/corba/CMakeLists.txt             | 26 ++++++---
+ rtt/transports/mqueue/CMakeLists.txt            | 16 ++++--
+ rtt/types/TypekitPlugin.hpp                     |  6 +--
+ tests/testtypes/types/CMakeLists.txt            |  6 +++
+ 21 files changed, 196 insertions(+), 78 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 5f8eb8c..79eda52 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -19,6 +19,15 @@ endif()
+ #                                                 #
+ ###################################################
+ 
++SET( OROCOS_TARGET $ENV{OROCOS_TARGET}) 
++#Before create project to set cxx compiler
++set (CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/config") 
++                                                       
++IF ( NOT CMAKE_BUILD_TYPE STREQUAL "rtems") 
++  FIND_PACKAGE(RTEMS REQUIRED)               
++ENDIF ( NOT CMAKE_BUILD_TYPE STREQUAL "rtems")
++ 
++
+ PROJECT(orocos-rtt)
+ 
+ 
+@@ -28,6 +37,8 @@ LIST( GET RTT_VERSIONS 0 RTT_VERSION_MAJOR)
+ LIST( GET RTT_VERSIONS 1 RTT_VERSION_MINOR)
+ LIST( GET RTT_VERSIONS 2 RTT_VERSION_PATCH)
+ 
++SET(ROS_ROOT $ENV{ROS_ROOT}) #Don't know why is this there
++
+ MESSAGE( "Orocos RTT version ${VERSION} (${RTT_VERSION_MAJOR}.${RTT_VERSION_MINOR}.${RTT_VERSION_PATCH})" )
+ 
+ SET( PROJ_SOURCE_DIR ${orocos-rtt_SOURCE_DIR} )
+diff --git a/UseOROCOS-RTT.cmake b/UseOROCOS-RTT.cmake
+index 38a3cb6..ac9ff4f 100644
+--- a/UseOROCOS-RTT.cmake
++++ b/UseOROCOS-RTT.cmake
+@@ -273,7 +273,10 @@ if(OROCOS-RTT_FOUND AND NOT USE_OROCOS_RTT)
+     if (ORO_USE_ROSBUILD)
+       MESSAGE( STATUS "[UseOrocos] Building component ${COMPONENT_NAME} in library ${COMPONENT_LIB_NAME} in rosbuild source tree." )
+       rosbuild_add_library(${COMPONENT_NAME} ${SOURCES} )
+-    else()
++	  elseif(BUILD_STATIC)
++			MESSAGE( STATUS "[UseOrocos] Building component ${COMPONENT_NAME} in static library ${COMPONENT_LIB_NAME}" )
++    	ADD_LIBRARY( ${LIB_TARGET_NAME} STATIC ${SOURCES} )
++    elseif(NOT NOT_BUILD_SHARED)
+       MESSAGE( STATUS "[UseOrocos] Building component ${COMPONENT_NAME} in library ${COMPONENT_LIB_NAME}" )
+       ADD_LIBRARY( ${COMPONENT_NAME} SHARED ${SOURCES} )
+     endif()
+@@ -353,7 +356,9 @@ macro( orocos_library LIB_TARGET_NAME )
+     if (ORO_USE_ROSBUILD)
+       MESSAGE( STATUS "[UseOrocos] Building library ${LIB_TARGET_NAME} in rosbuild source tree." )
+       rosbuild_add_library(${LIB_TARGET_NAME} ${SOURCES} )
+-    else()
++    elseif(BUILD_STATIC)
++      ADD_LIBRARY( ${LIB_TARGET_NAME} STATIC ${SOURCES} )
++    elseif(NOT NOT_BUILD_SHARED)
+       MESSAGE( STATUS "[UseOrocos] Building library ${LIB_TARGET_NAME}" )
+       ADD_LIBRARY( ${LIB_TARGET_NAME} SHARED ${SOURCES} )
+     endif()
+@@ -608,7 +613,10 @@ macro( orocos_library LIB_TARGET_NAME )
+     MESSAGE( STATUS "[UseOrocos] Building typekit library ${LIB_TARGET_NAME}" )
+     if (ORO_USE_ROSBUILD)
+       rosbuild_add_library(${LIB_TARGET_NAME} ${SOURCES} )
+-    else()
++    elseif(BUILD_STATIC)
++			MESSAGE( STATUS "[UseOrocos] Building component ${COMPONENT_NAME} in static library ${COMPONENT_LIB_NAME}" )
++    	ADD_LIBRARY( ${LIB_TARGET_NAME} STATIC ${SOURCES} )
++    elseif(NOT NOT_BUILD_SHARED)
+       ADD_LIBRARY( ${LIB_TARGET_NAME} SHARED ${SOURCES} )
+     endif()
+     SET_TARGET_PROPERTIES( ${LIB_TARGET_NAME} PROPERTIES
+@@ -688,7 +696,10 @@ macro( orocos_library LIB_TARGET_NAME )
+     if (ORO_USE_ROSBUILD)
+       MESSAGE( STATUS "[UseOrocos] Building plugin library ${LIB_TARGET_NAME} in rosbuild source tree." )
+       rosbuild_add_library(${LIB_TARGET_NAME} ${SOURCES} )
+-    else()
++		elseif(BUILD_STATIC)
++			MESSAGE( STATUS "[UseOrocos] Building  static plugin library ${LIB_TARGET_NAME}" )
++   		ADD_LIBRARY( ${LIB_TARGET_NAME} STATIC ${SOURCES} )
++  	elseif(NOT NOT_BUILD_SHARED)
+       MESSAGE( STATUS "[UseOrocos] Building plugin library ${LIB_TARGET_NAME}" )
+       ADD_LIBRARY( ${LIB_TARGET_NAME} SHARED ${SOURCES} )
+     endif()
+diff --git a/config/FindOmniORB.cmake b/config/FindOmniORB.cmake
+index 56c9892..ae6426a 100644
+--- a/config/FindOmniORB.cmake
++++ b/config/FindOmniORB.cmake
+@@ -18,6 +18,7 @@
+ # Just set OMNIORB4_DIR it to your specific installation directory
+ #
+ 
++SET (OMNIORB4_DIR $ENV{OMNIORB4_DIR})
+ FIND_PATH( OMNIORB4_INCLUDE_DIR omniORB4/CORBA.h
+   PATHS
+   ${OMNIORB4_DIR}/include
+diff --git a/config/check_depend.cmake b/config/check_depend.cmake
+index 5f96be5..46d8c65 100644
+--- a/config/check_depend.cmake
++++ b/config/check_depend.cmake
+@@ -54,6 +54,12 @@ OPTION(ORO_NO_EMIT_CORBA_IOR "Do not emit CORBA IORs if name service not used" O
+ 
+ # Look for boost We look up all components in one place because this macro does
+ # not support multiple invocations in some CMake versions.
++
++if(OROCOS_TARGET STREQUAL "rtems")
++   set(Boost_USE_STATIC_LIBS   ON)
++   set(Boost_USE_MULTITHREADED ON)
++endif()
++
+ find_package(Boost 1.38 COMPONENTS filesystem system unit_test_framework thread serialization)
+ 
+ # Look for boost
+@@ -169,6 +175,32 @@ else()
+   set(OROPKG_OS_XENOMAI FALSE CACHE INTERNAL "" FORCE)
+ endif()
+ 
++# Setup flags for rtems 
++if(OROCOS_TARGET STREQUAL "rtems")
++  set(OROPKG_OS_RTEMS TRUE CACHE INTERNAL "This variable is exported to the rtt-config.h file to expose our target choice to the code." FORCE)
++  set(OS_HAS_TLSF FALSE)
++
++  find_package(RTEMS REQUIRED)
++
++  if(RTEMS_FOUND)
++
++    set(RTEMS_SUPPORT TRUE CACHE INTERNAL "" FORCE)
++
++    list(APPEND OROCOS-RTT_INCLUDE_DIRS ${RTEMS_INCLUDE_DIRS} )
++    list(APPEND OROCOS-RTT_LIBRARIES ${RTEMS_LIBRARIES} ${PTHREAD_LIBRARIES} ) 
++    list(APPEND OROCOS-RTT_DEFINITIONS "OROCOS_TARGET=${OROCOS_TARGET}") 
++    
++
++    message( "Turning BUILD_STATIC ON for rtems.")
++    set( FORCE_BUILD_STATIC ON CACHE INTERNAL "Forces to build Orocos RTT as a static library (forced to ON by Rtems)" FORCE)
++    set( BUILD_STATIC ON CACHE BOOL "Build Orocos RTT as a static library (forced to ON by Rtems)" FORCE)
++  endif()
++else()
++  set(OROPKG_OS_RTEMS FALSE CACHE INTERNAL "" FORCE)
++endif()
++
++
++
+ # Setup flags for GNU/Linux
+ if(OROCOS_TARGET STREQUAL "gnulinux")
+   set(OROPKG_OS_GNULINUX TRUE CACHE INTERNAL "This variable is exported to the rtt-config.h file to expose our target choice to the code." FORCE)
+diff --git a/config/rtt_macros.cmake b/config/rtt_macros.cmake
+index 845f3b2..1dc7bb3 100644
+--- a/config/rtt_macros.cmake
++++ b/config/rtt_macros.cmake
+@@ -40,8 +40,19 @@ ENDMACRO( GLOBAL_ADD_SRC )
+ # The resulting filename is '${name}-${OROCOS_TARGET}[.dll|.so|...]'
+ #
+ macro(ADD_RTT_TYPEKIT name version)
+-  ADD_LIBRARY(${name}-${OROCOS_TARGET}_plugin SHARED ${ARGN})
+-  STRING( REGEX MATCHALL "[0-9]+" versions ${version} )
++	IF ( BUILD_STATIC )
++      ADD_LIBRARY(${name}-${OROCOS_TARGET}_plugin STATIC ${ARGN})
++    ENDIF ( BUILD_STATIC )
++
++  IF (NOT NOT_BUILD_SHARED)
++  IF (UNIX AND NOT APPLE)
++    SET_TARGET_PROPERTIES( ${name}-${OROCOS_TARGET}_plugin PROPERTIES
++         LINK_FLAGS "-Wl,-zdefs")
++    ENDIF ()
++  ENDIF()
++
++  target_link_libraries(${name}-${OROCOS_TARGET}_plugin orocos-rtt-${OROCOS_TARGET}_dynamic)
++  STRING( REGEX MATCHALL "[0-9]" versions ${version} )
+   LIST( GET versions 0 version_major)
+   LIST( GET versions 1 version_minor)
+   LIST( GET versions 2 version_patch)
+@@ -54,9 +65,7 @@ macro(ADD_RTT_TYPEKIT name version)
+     INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib/orocos${OROCOS_SUFFIX};${CMAKE_INSTALL_PREFIX}/lib;${AC_INSTALL_DIR}"
+ 	INSTALL_NAME_DIR "${CMAKE_INSTALL_PREFIX}/lib/orocos${OROCOS_SUFFIX}/types"
+     CLEAN_DIRECT_OUTPUT 1)
+-  IF (UNIX AND NOT APPLE)
+-    SET_TARGET_PROPERTIES( ${name}-${OROCOS_TARGET}_plugin PROPERTIES
+-         LINK_FLAGS "-Wl,-zdefs")
++
+   ENDIF ()
+   if (DLL_EXPORT_PREFIX)
+     string(TOUPPER ${DLL_EXPORT_PREFIX} UDLL_EXPORT_PREFIX )
+@@ -64,8 +73,7 @@ macro(ADD_RTT_TYPEKIT name version)
+     SET_TARGET_PROPERTIES( ${name}-${OROCOS_TARGET}_plugin PROPERTIES DEFINE_SYMBOL "${DEFINE_PREFIX}")
+   endif()
+ 
+-  target_link_libraries(${name}-${OROCOS_TARGET}_plugin orocos-rtt-${OROCOS_TARGET}_dynamic)
+-
++  
+   if(DLL_EXPORT_PREFIX)
+     configure_file( ${CMAKE_CURRENT_SOURCE_DIR}/rtt-${DLL_EXPORT_PREFIX}-config.h.in ${CMAKE_CURRENT_BINARY_DIR}/rtt-${DLL_EXPORT_PREFIX}-config.h @ONLY)
+   endif()
+@@ -113,32 +121,34 @@ endmacro(ADD_RTT_TYPEKIT name)
+ # The resulting filename is '${name}-${OROCOS_TARGET}[.dll|.so|...]'
+ #
+ macro(ADD_RTT_PLUGIN name version)
+-  ADD_LIBRARY(${name}-${OROCOS_TARGET}_plugin SHARED ${ARGN})
+-  STRING( REGEX MATCHALL "[0-9]+" versions ${version} )
+-  LIST( GET versions 0 version_major)
+-  LIST( GET versions 1 version_minor)
+-  LIST( GET versions 2 version_patch)
+-  SET_TARGET_PROPERTIES( ${name}-${OROCOS_TARGET}_plugin PROPERTIES
+-    VERSION "${version}"
+-    SOVERSION "${version_major}.${version_minor}"
+-    OUTPUT_NAME ${name}-${OROCOS_TARGET}
+-    COMPILE_DEFINITIONS "${RTT_DEFINITIONS}"
+-    INSTALL_RPATH_USE_LINK_PATH 1
+-    INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib/orocos${OROCOS_SUFFIX}/types;${CMAKE_INSTALL_PREFIX}/lib;${AC_INSTALL_DIR}"
+-	INSTALL_NAME_DIR "${CMAKE_INSTALL_PREFIX}/lib/orocos${OROCOS_SUFFIX}/plugins"
+-    CLEAN_DIRECT_OUTPUT 1)
+-  IF (UNIX AND NOT APPLE)
+-    SET_TARGET_PROPERTIES( ${name}-${OROCOS_TARGET}_plugin PROPERTIES
+-         LINK_FLAGS "-Wl,-zdefs")
+-  ENDIF ()
++   IF ( BUILD_STATIC )
++      ADD_LIBRARY(${name}-${OROCOS_TARGET}_plugin STATIC ${ARGN})
++      target_link_libraries(${name}-${OROCOS_TARGET}_plugin orocos-rtt-${OROCOS_TARGET}_static)
++  ENDIF(BUILD_STATIC)
+ 
+-  if (DLL_EXPORT_PREFIX)
+-    string(TOUPPER ${DLL_EXPORT_PREFIX} UDLL_EXPORT_PREFIX )
+-    set(DEFINE_PREFIX "RTT_${UDLL_EXPORT_PREFIX}_DLL_EXPORT")
+-    SET_TARGET_PROPERTIES( ${name}-${OROCOS_TARGET}_plugin PROPERTIES DEFINE_SYMBOL "${DEFINE_PREFIX}")
+-  endif()
++  IF (NOT NOT_BUILD_SHARED)
++      ADD_LIBRARY(${name}-${OROCOS_TARGET}_plugin SHARED ${ARGN})
++      IF (UNIX AND NOT APPLE)
++        SET_TARGET_PROPERTIES( ${name}-${OROCOS_TARGET}_plugin PROPERTIES
++             LINK_FLAGS "-Wl,-zdefs")
++      ENDIF ()
++      target_link_libraries(${name}-${OROCOS_TARGET}_plugin orocos-rtt-${OROCOS_TARGET}_dynamic)
++   ENDIF(NOT NOT_BUILD_SHARED)
+ 
+-  target_link_libraries(${name}-${OROCOS_TARGET}_plugin orocos-rtt-${OROCOS_TARGET}_dynamic)
++      SET_TARGET_PROPERTIES( ${name}-${OROCOS_TARGET}_plugin PROPERTIES
++        VERSION "${version}"
++        OUTPUT_NAME ${name}-${OROCOS_TARGET}
++        COMPILE_DEFINITIONS "${RTT_DEFINITIONS}"
++        COMPILE_FLAGS "${CMAKE_CXX_FLAGS_ADD}"
++        INSTALL_RPATH_USE_LINK_PATH 1
++        INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib/orocos${OROCOS_SUFFIX}/types;${CMAKE_INSTALL_PREFIX}/lib;${AC_INSTALL_DIR}"
++
++        CLEAN_DIRECT_OUTPUT 1)
++      if (DLL_EXPORT_PREFIX)
++        string(TOUPPER ${DLL_EXPORT_PREFIX} UDLL_EXPORT_PREFIX )
++        set(DEFINE_PREFIX "RTT_${UDLL_EXPORT_PREFIX}_DLL_EXPORT")
++        SET_TARGET_PROPERTIES( ${name}-${OROCOS_TARGET}_plugin PROPERTIES DEFINE_SYMBOL "${DEFINE_PREFIX}")
++      endif()
+   
+   if(DLL_EXPORT_PREFIX)
+     configure_file( ${CMAKE_CURRENT_SOURCE_DIR}/rtt-${DLL_EXPORT_PREFIX}-config.h.in ${CMAKE_CURRENT_BINARY_DIR}/rtt-${DLL_EXPORT_PREFIX}-config.h @ONLY)
+diff --git a/debian/liborocos-rtt-corba-template-dev.install b/debian/liborocos-rtt-corba-template-dev.install
+index a8f1097..ca134a5 100644
+--- a/debian/liborocos-rtt-corba-template-dev.install
++++ b/debian/liborocos-rtt-corba-template-dev.install
+@@ -1,3 +1,3 @@
+-usr/lib/liborocos-rtt-corba-@TARGET@.so
+-usr/lib/orocos/@TARGET@/types/librtt-transport-corba-@TARGET@.so
++usr/lib/liborocos-rtt-corba-@TARGET@.*
++usr/lib/orocos/@TARGET@/types/librtt-transport-corba-@TARGET@.*
+ usr/lib/pkgconfig/orocos-rtt-corba-@TARGET@.pc
+diff --git a/debian/liborocos-rtt-corba-template.install b/debian/liborocos-rtt-corba-template.install
+index 416ee3a..06b6e8c 100644
+--- a/debian/liborocos-rtt-corba-template.install
++++ b/debian/liborocos-rtt-corba-template.install
+@@ -1,2 +1,2 @@
+-usr/lib/liborocos-rtt-corba-@TARGET@*.so.*
+-usr/lib/orocos/@TARGET@/types/librtt-transport-corba-@TARGET@*.so.*
+++usr/lib/liborocos-rtt-corba-@TARGET@*.*.*
+++usr/lib/orocos/@TARGET@/types/librtt-transport-corba-@TARGET@*.*.*
+diff --git a/debian/liborocos-rtt-template-dev.install b/debian/liborocos-rtt-template-dev.install
+index 7a2d19e..5150745 100644
+--- a/debian/liborocos-rtt-template-dev.install
++++ b/debian/liborocos-rtt-template-dev.install
+@@ -1,9 +1,9 @@
+-usr/lib/liborocos-rtt-@TARGET@.so
+-usr/lib/liborocos-rtt-mqueue-@TARGET@.so
+-usr/lib/orocos/@TARGET@/types/librtt-typekit-@TARGET@.so
+-usr/lib/orocos/@TARGET@/types/librtt-transport-mqueue-@TARGET@.so
+-usr/lib/orocos/@TARGET@/plugins/librtt-scripting-@TARGET@.so
+-usr/lib/orocos/@TARGET@/plugins/librtt-marshalling-@TARGET@.so
++usr/lib/liborocos-rtt-@TARGET@.*
++usr/lib/liborocos-rtt-mqueue-@TARGET@.*
++usr/lib/orocos/@TARGET@/types/librtt-typekit-@TARGET@.*
++usr/lib/orocos/@TARGET@/types/librtt-transport-mqueue-@TARGET@.*
++usr/lib/orocos/@TARGET@/plugins/librtt-scripting-@TARGET@.*
++usr/lib/orocos/@TARGET@/plugins/librtt-marshalling-@TARGET@.*
+ usr/lib/pkgconfig/orocos-rtt-@TARGET@.pc
+ usr/lib/pkgconfig/orocos-rtt-mqueue-@TARGET@.pc
+ usr/include/rtt/os/targets/@TARGET@-config.h
+diff --git a/debian/liborocos-rtt-template.install b/debian/liborocos-rtt-template.install
+index 492fe8e..4ade72e 100644
+--- a/debian/liborocos-rtt-template.install
++++ b/debian/liborocos-rtt-template.install
+@@ -1,6 +1,6 @@
+-usr/lib/liborocos-rtt-@TARGET@*.so.*
+-usr/lib/liborocos-rtt-mqueue-@TARGET@*.so.*
+-usr/lib/orocos/@TARGET@/types/librtt-typekit-@TARGET@*.so.*
+-usr/lib/orocos/@TARGET@/types/librtt-transport-mqueue-@TARGET@*.so.*
+-usr/lib/orocos/@TARGET@/plugins/librtt-scripting-@TARGET@*.so.*
+-usr/lib/orocos/@TARGET@/plugins/librtt-marshalling-@TARGET@*.so.*
++usr/lib/liborocos-rtt-@TARGET@*.*.*
++usr/lib/liborocos-rtt-mqueue-@TARGET@*.*.*
++usr/lib/orocos/@TARGET@/types/librtt-typekit-@TARGET@*.*.*
++usr/lib/orocos/@TARGET@/types/librtt-transport-mqueue-@TARGET@*.*.*
++usr/lib/orocos/@TARGET@/plugins/librtt-scripting-@TARGET@*.*.*
++usr/lib/orocos/@TARGET@/plugins/librtt-marshalling-@TARGET@*.*.*
+diff --git a/orocos-rtt-config.cmake b/orocos-rtt-config.cmake
+index a531663..40bffbc 100644
+--- a/orocos-rtt-config.cmake
++++ b/orocos-rtt-config.cmake
+@@ -114,11 +114,19 @@ if (EXISTS "${OROCOS-RTT_IMPORT_FILE}")
+   include("${OROCOS-RTT_IMPORT_FILE}")
+ 
+ # Core RTT libraries
+-set(OROCOS-RTT_TARGET "${PREFIX}orocos-rtt-${OROCOS_TARGET}_dynamic")
++if (BUILD_STATIC)
++	set (TYPE "static")
++endif (BUILD_STATIC)
++
++if (NOT NOT_BUILD_SHARED)
++	set (TYPE "dynamic")
++endif (NOT NOT_BUILD_SHARED)
++
++set(OROCOS-RTT_TARGET "${PREFIX}orocos-rtt-${OROCOS_TARGET}_${TYPE}")
+ if(TARGET ${OROCOS-RTT_TARGET})
+   set(OROCOS-RTT_LIBRARIES ${OROCOS-RTT_TARGET})
+ else()
+-  message(FATAL_ERROR "Imported target ${PREFIX}orocos-rtt-${OROCOS_TARGET}_dynamic not found. Please contact a project developer to fix this issue")
++  message(FATAL_ERROR "Imported target ${PREFIX}orocos-rtt-${OROCOS_TARGET}_${TYPE} not found. Please contact a project developer to fix this issue")
+ endif()
+ 
+ # Typekit support
+@@ -129,7 +137,7 @@ if(TARGET ${OROCOS-RTT_TYPEKIT_TARGET})
+ endif()
+ 
+ # Corba support
+-set(OROCOS-RTT_CORBA_TARGET "${PREFIX}orocos-rtt-corba-${OROCOS_TARGET}_dynamic")
++set(OROCOS-RTT_CORBA_TARGET "${PREFIX}orocos-rtt-corba-${OROCOS_TARGET}_${TYPE}")
+ if(TARGET ${OROCOS-RTT_CORBA_TARGET})
+   set(OROCOS-RTT_CORBA_FOUND TRUE)
+   set(FOUND_TRANSPORTS "${FOUND_TRANSPORTS} corba")
+@@ -137,7 +145,7 @@ if(TARGET ${OROCOS-RTT_CORBA_TARGET})
+ endif()
+ 
+ # Mqueue support
+-set(OROCOS-RTT-MQUEUE_TARGET "${PREFIX}orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic")
++set(OROCOS-RTT-MQUEUE_TARGET "${PREFIX}orocos-rtt-mqueue-${OROCOS_TARGET}_${TYPE}")
+ if(TARGET ${OROCOS-RTT-MQUEUE_TARGET})
+   set(OROCOS-RTT_MQUEUE_FOUND TRUE)
+   set(FOUND_TRANSPORTS "${FOUND_TRANSPORTS} mqueue")
+diff --git a/orocos-rtt.default.cmake b/orocos-rtt.default.cmake
+index 1373243..e18fb37 100644
+--- a/orocos-rtt.default.cmake
++++ b/orocos-rtt.default.cmake
+@@ -51,10 +51,10 @@ endif()
+ # set(FORCE_BUILD_STATIC ON)
+ 
+ #
+-# Set the target operating system. One of [lxrt gnulinux xenomai macosx win32]
++# Set the target operating system. One of [lxrt gnulinux xenomai macosx rtems win32]
+ # You may leave this as-is or force a certain target by removing the if... logic.
+ #
+-set(DOC_STRING "The Operating System target. One of [gnulinux lxrt macosx win32 xenomai]")
++set(DOC_STRING "The Operating System target. One of [gnulinux lxrt macosx rtems win32 xenomai ]")
+ set(OROCOS_TARGET_ENV $ENV{OROCOS_TARGET}) # MUST use helper variable, otherwise not picked up !!!
+ if( OROCOS_TARGET_ENV )
+   set(OROCOS_TARGET ${OROCOS_TARGET_ENV} CACHE STRING "${DOC_STRING}" FORCE)
+diff --git a/rtt/CMakeLists.txt b/rtt/CMakeLists.txt
+index feebcc7..dab21c9 100644
+--- a/rtt/CMakeLists.txt
++++ b/rtt/CMakeLists.txt
+@@ -190,7 +190,8 @@ IF ( BUILD_STATIC )
+   VERSION "${RTT_VERSION}"
+   CLEAN_DIRECT_OUTPUT 1)
+ ENDIF ( BUILD_STATIC )
+-
++  
++IF(NOT NOT_BUILD_SHARED)
+   ADD_LIBRARY(orocos-rtt-${OROCOS_TARGET}_dynamic SHARED $ENV{GLOBAL_LIBRARY_SRCS})
+   SET_TARGET_PROPERTIES( orocos-rtt-${OROCOS_TARGET}_dynamic PROPERTIES
+   DEFINE_SYMBOL "RTT_DLL_EXPORT"
+@@ -214,6 +215,7 @@ ENDIF ( BUILD_STATIC )
+   IF (BUILD_ENABLE_COVERAGE)
+ 	target_link_libraries(orocos-rtt-${OROCOS_TARGET}_dynamic gcov)
+   ENDIF (BUILD_ENABLE_COVERAGE)
++ENDIF(NOT NOT_BUILD_SHARED)
+   IF (ROSLIB_SUPPORT)
+         target_link_libraries(orocos-rtt-${OROCOS_TARGET}_dynamic ${ROS_LIBRARIES})
+ 	get_filename_component(ROS_LIBRARY_PATH "${ROS_LIBRARIES}" PATH)
+@@ -235,14 +237,19 @@ CONFIGURE_FILE( ${PROJ_SOURCE_DIR}/rtt/os/targets/target-config.h.in ${PROJ_BINA
+ CONFIGURE_FILE( ${PROJ_SOURCE_DIR}/rtt/orocos-rtt.pc.in ${PROJ_BINARY_DIR}/rtt/orocos-rtt-${OROCOS_TARGET}.pc @ONLY)
+ 
+ INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/orocos-rtt-${OROCOS_TARGET}.pc DESTINATION  lib/pkgconfig )
+-INSTALL(TARGETS             orocos-rtt-${OROCOS_TARGET}_dynamic
+-        EXPORT              ${LIBRARY_EXPORT_FILE}
+-        LIBRARY DESTINATION lib
+-		ARCHIVE DESTINATION lib
+-        RUNTIME DESTINATION bin )
++
+ IF(BUILD_STATIC)
+   INSTALL(TARGETS             orocos-rtt-${OROCOS_TARGET}_static
+           EXPORT              ${LIBRARY_EXPORT_FILE}
+           ARCHIVE DESTINATION lib )
+ ENDIF(BUILD_STATIC)
+ 
++IF(NOT NOT_BUILD_SHARED)
++   INSTALL(TARGETS             orocos-rtt-${OROCOS_TARGET}_dynamic
++        EXPORT              ${LIBRARY_EXPORT_FILE}
++        LIBRARY DESTINATION lib
++		ARCHIVE DESTINATION lib
++        RUNTIME DESTINATION bin )
++ENDIF(NOT NOT_BUILD_SHARED)
++ 
++
+diff --git a/rtt/os/CMakeLists.txt b/rtt/os/CMakeLists.txt
+index 4046290..960467f 100644
+--- a/rtt/os/CMakeLists.txt
++++ b/rtt/os/CMakeLists.txt
+@@ -10,6 +10,7 @@ ADD_SUBDIRECTORY( lxrt )
+ ADD_SUBDIRECTORY( xenomai )
+ ADD_SUBDIRECTORY( ecos )
+ ADD_SUBDIRECTORY( macosx )
++ADD_SUBDIRECTORY( rtems )
+ ADD_SUBDIRECTORY( win32 )
+ 
+ # Supported Hardware
+@@ -19,6 +20,7 @@ ADD_SUBDIRECTORY( oro_powerpc )
+ ADD_SUBDIRECTORY( oro_msvc )
+ ADD_SUBDIRECTORY( oro_noasm )
+ ADD_SUBDIRECTORY( oro_gcc )
++ADD_SUBDIRECTORY( oro_sparc )
+ 
+ # Target specific config files
+ ADD_SUBDIRECTORY( targets )
+diff --git a/rtt/os/fosi.h b/rtt/os/fosi.h
+index a8abedd..d914bdc 100644
+--- a/rtt/os/fosi.h
++++ b/rtt/os/fosi.h
+@@ -59,6 +59,10 @@
+   #include "macosx/fosi.h"
+ #endif
+ 
++#ifdef OROPKG_OS_RTEMS
++  #include "rtems/fosi.h"
++#endif
++
+ #ifdef OROPKG_OS_WIN32
+   #include "win32/fosi.h"
+ #endif
+diff --git a/rtt/os/oro_arch.h b/rtt/os/oro_arch.h
+index e31ca83..881586d 100644
+--- a/rtt/os/oro_arch.h
++++ b/rtt/os/oro_arch.h
+@@ -11,6 +11,8 @@
+ #         include "oro_i386/oro_arch.h"
+ #      elif defined( OROBLD_OS_ARCH_x86_64 )
+ #         include "oro_x86_64/oro_arch.h"
++#      elif defined( OROBLD_OS_sparc)
++#         include "oro_sparc/oro_arch.h"
+ #      elif defined( OROBLD_OS_ARCH_ppc )
+ #         include "oro_powerpc/oro_arch.h"
+ #      else
+diff --git a/rtt/plugin/PluginLoader.cpp b/rtt/plugin/PluginLoader.cpp
+index fc71814..4fa9e15 100644
+--- a/rtt/plugin/PluginLoader.cpp
++++ b/rtt/plugin/PluginLoader.cpp
+@@ -53,7 +53,9 @@
+ #include "../internal/GlobalService.hpp"
+ 
+ #include <cstdlib>
++#ifndef __RTEMS__
+ #include <dlfcn.h>
++#endif
+ 
+ #include <vector>
+ #include <set>
+@@ -640,6 +642,7 @@ bool PluginLoader::isLoadedInternal(string file)
+ 
+ // loads a single plugin in the current process.
+ bool PluginLoader::loadInProcess(string file, string shortname, string kind, bool log_error) {
++    #ifndef __RTEMS__
+     path p(file);
+     char* error;
+     void* handle;
+@@ -700,6 +703,7 @@ bool PluginLoader::loadInProcess(string file, string shortname, string kind, boo
+             log(Error) << "Plugin "<< plugname <<" reports to be compiled for OROCOS_TARGET "<< targetname
+                     << " while we are running on target "<< OROCOS_TARGET_NAME <<". Unloading."<<endlog();
+             dlclose(handle);
++            #endif
+             return false;
+         }
+ 
+diff --git a/rtt/rtt-config.h.in b/rtt/rtt-config.h.in
+index 021940f..4b0a6bc 100644
+--- a/rtt/rtt-config.h.in
++++ b/rtt/rtt-config.h.in
+@@ -24,6 +24,8 @@
+ #endif
+ # if defined( __GNUC__ ) && defined( __i386__ )
+ #  define OROBLD_OS_ARCH_i386
++# elif defined( __RTEMS__ ) && defined( __SPARC__ )
++#  define OROBLD_OS_ARCH_sparc
+ # elif defined( __GNUC__ ) && defined( __x86_64__ )
+ #  define OROBLD_OS_ARCH_x86_64
+ # elif defined( __GNUC__ ) && (defined( __powerpc__ ) || defined( __PPC__ ) )
+diff --git a/rtt/transports/corba/CMakeLists.txt b/rtt/transports/corba/CMakeLists.txt
+index 1c0e91d..16a3863 100644
+--- a/rtt/transports/corba/CMakeLists.txt
++++ b/rtt/transports/corba/CMakeLists.txt
+@@ -55,8 +55,9 @@ IF ( BUILD_STATIC )
+   CLEAN_DIRECT_OUTPUT 1
+   VERSION "${RTT_VERSION}"
+   COMPILE_DEFINITIONS "${OROCOS-RTT_DEFINITIONS}")
+-ENDIF( BUILD_STATIC )
+ 
++ENDIF( BUILD_STATIC )
++IF(NOT NOT_BUILD_SHARED )
+   ADD_LIBRARY(orocos-rtt-corba-${OROCOS_TARGET}_dynamic SHARED ${CPPS})
+   TARGET_LINK_LIBRARIES(orocos-rtt-corba-${OROCOS_TARGET}_dynamic 
+ 	orocos-rtt-${OROCOS_TARGET}_dynamic
+@@ -70,6 +71,7 @@ ENDIF( BUILD_STATIC )
+   SOVERSION "${RTT_VERSION_MAJOR}.${RTT_VERSION_MINOR}"
+   VERSION "${RTT_VERSION}"
+   INSTALL_NAME_DIR "${CMAKE_INSTALL_PREFIX}/lib")
++  ENDIF(NOT NOT_BUILD_SHARED )
+ 
+ create_pc_flags( "${CORBA_DEFINITIONS}" "${CORBA_INCLUDE_DIRS}" "${CORBA_LIBRARIES}" RTT_CORBA_DEFINES RTT_CORBA_CFLAGS RTT_CORBA_LINKFLAGS)
+ create_pc_flags( "${RTT_DUMMY}" "${RTT_DUMMY}" "${CORBA_USER_LINK_LIBS}" RTT_DUMMY RTT_DUMMY RTT_CORBA_USER_LINKFLAGS)
+@@ -80,22 +82,32 @@ CONFIGURE_FILE( ${CMAKE_CURRENT_SOURCE_DIR}/rtt-corba-config.h.in ${CMAKE_CURREN
+ IF ( BUILD_STATIC )
+   INSTALL(TARGETS             orocos-rtt-corba-static_${OROCOS_TARGET}
+           EXPORT              ${LIBRARY_EXPORT_FILE}
+-          ARCHIVE DESTINATION lib )
+-ENDIF( BUILD_STATIC )
++          ARCHIVE DESTINATION lib
++          LIBRARY DESTINATION lib
++          RUNTIME DESTINATION bin )
+ 
+   if (PLUGINS_CORBA_TRANSPORT_TYPES)
+     SET(RTT_DEFINITIONS "${OROCOS-RTT_DEFINITIONS}")
+     ADD_RTT_TYPEKIT(rtt-transport-corba ${RTT_VERSION} CorbaLib.cpp)
+-    target_link_libraries(rtt-transport-corba-${OROCOS_TARGET}_plugin orocos-rtt-corba-${OROCOS_TARGET}_dynamic )
++    target_link_libraries(rtt-transport-corba-${OROCOS_TARGET}_plugin orocos-rtt-corba-static_${OROCOS_TARGET})
+   endif()
+-
+-
+-  INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/orocos-rtt-corba-${OROCOS_TARGET}.pc DESTINATION  lib/pkgconfig )
++ENDIF( BUILD_STATIC )
++ 
++IF(NOT NOT_BUILD_SHARED )
+   INSTALL(TARGETS             orocos-rtt-corba-${OROCOS_TARGET}_dynamic
+           EXPORT              ${LIBRARY_EXPORT_FILE}
+           ARCHIVE DESTINATION lib
+           LIBRARY DESTINATION lib
+           RUNTIME DESTINATION bin )
++
++  if (PLUGINS_CORBA_TRANSPORT_TYPES)
++    SET(RTT_DEFINITIONS "${OROCOS-RTT_DEFINITIONS}")
++    ADD_RTT_TYPEKIT(rtt-transport-corba ${RTT_VERSION} CorbaLib.cpp)
++    target_link_libraries(rtt-transport-corba-${OROCOS_TARGET}_plugin orocos-rtt-corba-${OROCOS_TARGET}_dynamic )
++  endif()
++ENDIF(NOT NOT_BUILD_SHARED )
++
++  INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/orocos-rtt-corba-${OROCOS_TARGET}.pc DESTINATION  lib/pkgconfig )
+   INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/TransportPlugin.hpp ${CMAKE_CURRENT_BINARY_DIR}/rtt-corba-config.h ${IDLS} DESTINATION include/rtt/transports/corba )
+ 
+ ENDIF(ENABLE_CORBA)
+diff --git a/rtt/transports/mqueue/CMakeLists.txt b/rtt/transports/mqueue/CMakeLists.txt
+index dd0b214..da6a8dd 100644
+--- a/rtt/transports/mqueue/CMakeLists.txt
++++ b/rtt/transports/mqueue/CMakeLists.txt
+@@ -33,7 +33,7 @@ IF ( BUILD_STATIC )
+   COMPILE_DEFINITIONS "${OROCOS-RTT_DEFINITIONS}")
+ 
+ ENDIF( BUILD_STATIC )
+-
++IF(NOT NOT_BUILD_SHARED )
+   ADD_LIBRARY(orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic SHARED ${CPPS})
+   TARGET_LINK_LIBRARIES(orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic 
+ 	orocos-rtt-${OROCOS_TARGET}_dynamic
+@@ -47,6 +47,8 @@ ENDIF( BUILD_STATIC )
+   COMPILE_DEFINITIONS "${OROCOS-RTT_DEFINITIONS}"
+   SOVERSION "${RTT_VERSION_MAJOR}.${RTT_VERSION_MINOR}"
+   VERSION "${RTT_VERSION}"
++
++ENDIF(NOT NOT_BUILD_SHARED )
+   INSTALL_NAME_DIR "${CMAKE_INSTALL_PREFIX}/lib")
+ 
+ create_pc_flags( "${MQ_DEFINITIONS}" "${MQ_INCLUDE_DIRS}" "${MQ_LIBRARIES}" RTT_MQ_DEFINES RTT_MQ_CFLAGS RTT_MQ_LINKFLAGS)
+@@ -58,18 +60,22 @@ IF ( BUILD_STATIC )
+   INSTALL(TARGETS             orocos-rtt-mqueue-${OROCOS_TARGET}_static
+           EXPORT              ${LIBRARY_EXPORT_FILE}
+           ARCHIVE DESTINATION lib )
++  #target_link_libraries( rtt-transport-mqueue-${OROCOS_TARGET}_plugin orocos-rtt-mqueue-${OROCOS_TARGET}_static)
+ ENDIF( BUILD_STATIC )
+ 
++IF(NOT NOT_BUILD_SHARED)
++  INSTALL(TARGETS             orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic
++          EXPORT              ${LIBRARY_EXPORT_FILE}
++          LIBRARY DESTINATION lib RUNTIME DESTINATION bin )
++  INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/orocos-rtt-mqueue-${OROCOS_TARGET}.pc DESTINATION  lib/pkgconfig )
++ENDIF(NOT NOT_BUILD_SHARED)
++
+   SET(RTT_DEFINITIONS "${OROCOS-RTT_DEFINITIONS}")
+   ADD_RTT_TYPEKIT( rtt-transport-mqueue ${RTT_VERSION} MQLib.cpp)
+   target_link_libraries( rtt-transport-mqueue-${OROCOS_TARGET}_plugin orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic)
+   set_target_properties( rtt-transport-mqueue-${OROCOS_TARGET}_plugin PROPERTIES
+     LINK_FLAGS "${MQ_LDFLAGS} ${CMAKE_LD_FLAGS}")
+ 
+-  INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/orocos-rtt-mqueue-${OROCOS_TARGET}.pc DESTINATION  lib/pkgconfig )
+-  INSTALL(TARGETS             orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic
+-          EXPORT              ${LIBRARY_EXPORT_FILE}
+-          LIBRARY DESTINATION lib RUNTIME DESTINATION bin )
+   INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/rtt-mqueue-config.h TransportPlugin.hpp DESTINATION include/rtt/transports/mqueue )
+ 
+ ENDIF(ENABLE_MQ)
+diff --git a/rtt/types/TypekitPlugin.hpp b/rtt/types/TypekitPlugin.hpp
+index 7b1a603..bd6ad2c 100644
+--- a/rtt/types/TypekitPlugin.hpp
++++ b/rtt/types/TypekitPlugin.hpp
+@@ -127,7 +127,7 @@ namespace RTT
+ #define ORO_TYPEKIT_PLUGIN( TYPEKIT ) \
+     namespace RTT { class TaskContext; } \
+     extern "C" {                      \
+-        RTT_EXPORT bool loadRTTPlugin(RTT::TaskContext* tc); \
++        static RTT_EXPORT bool loadRTTPlugin(RTT::TaskContext* tc); \
+         bool loadRTTPlugin(RTT::TaskContext* tc) { \
+             if (tc == 0) { \
+                 RTT::types::TypekitRepository::Import( new TYPEKIT() ); \
+@@ -135,12 +135,12 @@ namespace RTT
+             } \
+             return false; \
+         } \
+-        RTT_EXPORT std::string getRTTPluginName(); \
++        static RTT_EXPORT std::string getRTTPluginName(); \
+         std::string getRTTPluginName() { \
+         TYPEKIT tk; \
+         return tk.getName(); \
+         } \
+-        RTT_EXPORT std::string getRTTTargetName(); \
++        static RTT_EXPORT std::string getRTTTargetName(); \
+         std::string getRTTTargetName() { \
+             return OROCOS_TARGET_NAME; \
+         } \
+diff --git a/tests/testtypes/types/CMakeLists.txt b/tests/testtypes/types/CMakeLists.txt
+index b8ef74f..fc1d56e 100644
+--- a/tests/testtypes/types/CMakeLists.txt
++++ b/tests/testtypes/types/CMakeLists.txt
+@@ -1,5 +1,11 @@
+ 
++  if (NOT NOT_BUILD_SHARED)
+   ADD_LIBRARY(testtypes_plugin SHARED plugins_test_types.cpp sequence_types.cpp struct_types.cpp array_types.cpp)
++  endif (NOT NOT_BUILD_SHARED)
++
++  if (BUILD_STATIC)
++  ADD_LIBRARY(testtypes_plugin STATIC plugins_test_types.cpp sequence_types.cpp struct_types.cpp array_types.cpp)
++  endif (BUILD_STATIC)
+ 
+   # Allows us to build the plugin not in the debug/ or release/ subdir
+   if (MSVC)
+-- 
+1.9.1
+
