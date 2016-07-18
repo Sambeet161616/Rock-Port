@@ -1,0 +1,238 @@
+From 6208debcbdd62028864ffb3fbc879054dae5a075 Mon Sep 17 00:00:00 2001
+From: Sambeet161616 <b313036@iiit-bh.ac.in>
+Date: Tue, 5 Jul 2016 03:32:02 +0530
+Subject: [PATCH 2/2] final changes to rtt
+
+---
+ config/FindBoost.cmake               |  6 +--
+ config/check_depend.cmake            |  4 +-
+ config/rtt_macros.cmake              |  7 ++-
+ orocos-rtt.default.cmake             |  2 +-
+ rtt/CMakeLists.txt                   | 20 +++++---
+ rtt/transports/mqueue/CMakeLists.txt | 88 ++++++++++++++++++------------------
+ 6 files changed, 64 insertions(+), 63 deletions(-)
+
+diff --git a/config/FindBoost.cmake b/config/FindBoost.cmake
+index 67637bf..02a0e10 100644
+--- a/config/FindBoost.cmake
++++ b/config/FindBoost.cmake
+@@ -496,11 +496,7 @@ ELSE (_boost_IN_CACHE)
+   ENDIF(WIN32)
+ 
+   SET(_boost_INCLUDE_SEARCH_DIRS
+-    C:/boost/include
+-    C:/boost
+-    "$ENV{ProgramFiles}/boost/include"
+-    "$ENV{ProgramFiles}/boost"
+-    /sw/local/include
++    "$ENV{INSTALL_PREFIX}/boost/include/"
+   )
+ 
+   # If BOOST_ROOT was defined in the environment, use it.
+diff --git a/config/check_depend.cmake b/config/check_depend.cmake
+index 46d8c65..64a7eda 100644
+--- a/config/check_depend.cmake
++++ b/config/check_depend.cmake
+@@ -120,8 +120,8 @@ endif(XERCES_FOUND)
+ message("Orocos target is ${OROCOS_TARGET}")
+ string(TOUPPER ${OROCOS_TARGET} OROCOS_TARGET_CAP)
+ 
+-if ( NOT ";lxrt;gnulinux;xenomai;macosx;win32;" MATCHES ".*;${OROCOS_TARGET};.*")
+-  message( FATAL_ERROR "OROCOS_TARGET=${OROCOS_TARGET} is an unkown target. Please use one of lxrt;gnulinux;xenomai;macosx;win32.")
++if ( NOT ";lxrt;gnulinux;xenomai;macosx;win32;rtems;" MATCHES ".*;${OROCOS_TARGET};.*")
++  message( FATAL_ERROR "OROCOS_TARGET=${OROCOS_TARGET} is an unkown target. Please use one of lxrt;gnulinux;xenomai;macosx;win32:rtems.")
+ endif()
+ 
+ # Setup flags for RTAI/LXRT
+diff --git a/config/rtt_macros.cmake b/config/rtt_macros.cmake
+index 1dc7bb3..29089a3 100644
+--- a/config/rtt_macros.cmake
++++ b/config/rtt_macros.cmake
+@@ -40,9 +40,9 @@ ENDMACRO( GLOBAL_ADD_SRC )
+ # The resulting filename is '${name}-${OROCOS_TARGET}[.dll|.so|...]'
+ #
+ macro(ADD_RTT_TYPEKIT name version)
+-	IF ( BUILD_STATIC )
+-      ADD_LIBRARY(${name}-${OROCOS_TARGET}_plugin STATIC ${ARGN})
+-    ENDIF ( BUILD_STATIC )
++		IF ( BUILD_STATIC )
++    	ADD_LIBRARY(${name}-${OROCOS_TARGET}_plugin STATIC ${ARGN})
++   	ENDIF ( BUILD_STATIC )
+ 
+   IF (NOT NOT_BUILD_SHARED)
+   IF (UNIX AND NOT APPLE)
+@@ -66,7 +66,6 @@ macro(ADD_RTT_TYPEKIT name version)
+ 	INSTALL_NAME_DIR "${CMAKE_INSTALL_PREFIX}/lib/orocos${OROCOS_SUFFIX}/types"
+     CLEAN_DIRECT_OUTPUT 1)
+ 
+-  ENDIF ()
+   if (DLL_EXPORT_PREFIX)
+     string(TOUPPER ${DLL_EXPORT_PREFIX} UDLL_EXPORT_PREFIX )
+     set(DEFINE_PREFIX "RTT_${UDLL_EXPORT_PREFIX}_DLL_EXPORT")
+diff --git a/orocos-rtt.default.cmake b/orocos-rtt.default.cmake
+index e18fb37..5ce004f 100644
+--- a/orocos-rtt.default.cmake
++++ b/orocos-rtt.default.cmake
+@@ -30,7 +30,7 @@
+ # 
+ # NOTE THE MANDATORY '/' instead of '\' on win32 platforms !
+ #
+-# set(CMAKE_INCLUDE_PATH ${CMAKE_INCLUDE_PATH} "C:/orocos/Boost-1_36_0/include")
++set(CMAKE_INCLUDE_PATH ${CMAKE_INCLUDE_PATH} "/home/sambeet/NewRockPort/x86/Install/boost/include/boost")
+ # set(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH} "C:/orocos/Boost-1_36_0/lib")
+ 
+ #
+diff --git a/rtt/CMakeLists.txt b/rtt/CMakeLists.txt
+index dab21c9..9690062 100644
+--- a/rtt/CMakeLists.txt
++++ b/rtt/CMakeLists.txt
+@@ -1,3 +1,12 @@
++# for CMake 2.6 corrected behaviour (see "cmake --help-policy CMP0003")
++IF(POLICY CMP0003)
++  CMAKE_POLICY(SET CMP0003 NEW)
++ENDIF(POLICY CMP0003)
++
++# Suppress cmake policy warning in included rtt_macros.cmake file in CMake >= 3.0.2 (see "cmake --help-policy CMP0026")
++if(POLICY CMP0016)
++  cmake_policy(SET CMP0016 OLD)
++endif()
+ 
+ include (CMakeDependentOption)
+ include (CreatePCFlags)
+@@ -216,12 +225,11 @@ IF(NOT NOT_BUILD_SHARED)
+ 	target_link_libraries(orocos-rtt-${OROCOS_TARGET}_dynamic gcov)
+   ENDIF (BUILD_ENABLE_COVERAGE)
+ ENDIF(NOT NOT_BUILD_SHARED)
+-  IF (ROSLIB_SUPPORT)
+-        target_link_libraries(orocos-rtt-${OROCOS_TARGET}_dynamic ${ROS_LIBRARIES})
+-	get_filename_component(ROS_LIBRARY_PATH "${ROS_LIBRARIES}" PATH)
+-	set_target_properties(orocos-rtt-${OROCOS_TARGET}_dynamic PROPERTIES
+-	  INSTALL_RPATH "${ROS_LIBRARY_PATH}")
+-  ENDIF (ROSLIB_SUPPORT)
++  #IF (ROSLIB_SUPPORT)
++        #target_link_libraries(orocos-rtt-${OROCOS_TARGET}_dynamic ${ROS_LIBRARIES})
++	#get_filename_component(ROS_LIBRARY_PATH "${ROS_LIBRARIES}" PATH)
++	#set_target_properties(orocos-rtt-${OROCOS_TARGET}_dynamic PROPERTIES INSTALL_RPATH "${ROS_LIBRARY_PATH}")
++  #ENDIF (ROSLIB_SUPPORT)
+ 
+   if(ENABLE_MQ AND OROPKG_OS_XENOMAI AND XENOMAI_POSIX_FOUND)
+     target_link_libraries(orocos-rtt-${OROCOS_TARGET}_dynamic ${XENOMAI_POSIX_LIBRARIES})
+diff --git a/rtt/transports/mqueue/CMakeLists.txt b/rtt/transports/mqueue/CMakeLists.txt
+index da6a8dd..f1fa587 100644
+--- a/rtt/transports/mqueue/CMakeLists.txt
++++ b/rtt/transports/mqueue/CMakeLists.txt
+@@ -2,6 +2,7 @@
+ IF(ENABLE_MQ)
+   MESSAGE( "Building MQueue Transport library (Requires Boost >= 1.37.0).")
+ 
++
+   if (NOT Boost_SERIALIZATION_FOUND)
+     MESSAGE(SEND_ERROR "Can't build MQueue transport without Boost Serialization. Please install serialiation or disable MQUEUE.")
+   endif()
+@@ -22,61 +23,58 @@ IF(ENABLE_MQ)
+     set(MQ_LDFLAGS "")
+   endif()
+ 
+-IF ( BUILD_STATIC )
+-  ADD_LIBRARY(orocos-rtt-mqueue-${OROCOS_TARGET}_static STATIC ${CPPS})
+-  SET_TARGET_PROPERTIES( orocos-rtt-mqueue-${OROCOS_TARGET}_static 
+-  PROPERTIES DEFINE_SYMBOL "RTT_MQ_DLL_EXPORT"
+-  OUTPUT_NAME orocos-rtt-mqueue-${OROCOS_TARGET}
+-  CLEAN_DIRECT_OUTPUT 1
+-  VERSION "${RTT_VERSION}"
+-  LINK_FLAGS "${MQ_LDFLAGS} ${CMAKE_LD_FLAGS}"
+-  COMPILE_DEFINITIONS "${OROCOS-RTT_DEFINITIONS}")
+-
+-ENDIF( BUILD_STATIC )
+-IF(NOT NOT_BUILD_SHARED )
+-  ADD_LIBRARY(orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic SHARED ${CPPS})
+-  TARGET_LINK_LIBRARIES(orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic 
+-	orocos-rtt-${OROCOS_TARGET}_dynamic
+-	${MQ_LIBRARIES} ${Boost_SERIALIZATION_LIBRARY}
+-	) 
+-  SET_TARGET_PROPERTIES( orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic PROPERTIES
+-  DEFINE_SYMBOL "RTT_MQ_DLL_EXPORT"
+-  OUTPUT_NAME orocos-rtt-mqueue-${OROCOS_TARGET}
+-  CLEAN_DIRECT_OUTPUT 1
+-  LINK_FLAGS "${MQ_LDFLAGS} ${CMAKE_LD_FLAGS}"
+-  COMPILE_DEFINITIONS "${OROCOS-RTT_DEFINITIONS}"
+-  SOVERSION "${RTT_VERSION_MAJOR}.${RTT_VERSION_MINOR}"
+-  VERSION "${RTT_VERSION}"
+-
+-ENDIF(NOT NOT_BUILD_SHARED )
+-  INSTALL_NAME_DIR "${CMAKE_INSTALL_PREFIX}/lib")
++	IF ( BUILD_STATIC )
++  	ADD_LIBRARY(orocos-rtt-mqueue-${OROCOS_TARGET}_static STATIC ${CPPS})
++  	SET_TARGET_PROPERTIES( orocos-rtt-mqueue-${OROCOS_TARGET}_static
++  	PROPERTIES DEFINE_SYMBOL "RTT_MQ_DLL_EXPORT"
++  	OUTPUT_NAME orocos-rtt-mqueue-${OROCOS_TARGET}
++  	CLEAN_DIRECT_OUTPUT 1
++  	VERSION "${RTT_VERSION}"
++  	LINK_FLAGS "${MQ_LDFLAGS} ${CMAKE_LD_FLAGS}"
++  	COMPILE_DEFINITIONS "${OROCOS-RTT_DEFINITIONS}")
++	ENDIF( BUILD_STATIC )
+ 
+-create_pc_flags( "${MQ_DEFINITIONS}" "${MQ_INCLUDE_DIRS}" "${MQ_LIBRARIES}" RTT_MQ_DEFINES RTT_MQ_CFLAGS RTT_MQ_LINKFLAGS)
++  IF(NOT NOT_BUILD_SHARED )
++  	ADD_LIBRARY(orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic SHARED ${CPPS})
++  	TARGET_LINK_LIBRARIES(orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic
++		orocos-rtt-${OROCOS_TARGET}_dynamic
++		${MQ_LIBRARIES} ${Boost_SERIALIZATION_LIBRARY}
++		)
++  	SET_TARGET_PROPERTIES( orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic PROPERTIES
++  	DEFINE_SYMBOL "RTT_MQ_DLL_EXPORT"
++  	OUTPUT_NAME orocos-rtt-mqueue-${OROCOS_TARGET}
++  	CLEAN_DIRECT_OUTPUT 1
++  	LINK_FLAGS "${MQ_LDFLAGS} ${CMAKE_LD_FLAGS}"
++  	COMPILE_DEFINITIONS "${OROCOS-RTT_DEFINITIONS}"
++  	SOVERSION "${RTT_VERSION_MAJOR}.${RTT_VERSION_MINOR}"
++  	VERSION "${RTT_VERSION}"
++    INSTALL_NAME_DIR "${CMAKE_INSTALL_PREFIX}/lib")
++  ENDIF(NOT NOT_BUILD_SHARED )
+ 
+-CONFIGURE_FILE( ${CMAKE_CURRENT_SOURCE_DIR}/orocos-rtt-mqueue.pc.in ${CMAKE_CURRENT_BINARY_DIR}/orocos-rtt-mqueue-${OROCOS_TARGET}.pc @ONLY)
+-CONFIGURE_FILE( ${CMAKE_CURRENT_SOURCE_DIR}/rtt-mqueue-config.h.in ${CMAKE_CURRENT_BINARY_DIR}/rtt-mqueue-config.h @ONLY)
++	create_pc_flags( "${MQ_DEFINITIONS}" "${MQ_INCLUDE_DIRS}" "${MQ_LIBRARIES}" RTT_MQ_DEFINES RTT_MQ_CFLAGS RTT_MQ_LINKFLAGS)
++	CONFIGURE_FILE( ${CMAKE_CURRENT_SOURCE_DIR}/orocos-rtt-mqueue.pc.in ${CMAKE_CURRENT_BINARY_DIR}/orocos-rtt-mqueue-${OROCOS_TARGET}.pc @ONLY)
++	CONFIGURE_FILE( ${CMAKE_CURRENT_SOURCE_DIR}/rtt-mqueue-config.h.in ${CMAKE_CURRENT_BINARY_DIR}/rtt-mqueue-config.h @ONLY)
+ 
+-IF ( BUILD_STATIC )
+-  INSTALL(TARGETS             orocos-rtt-mqueue-${OROCOS_TARGET}_static
+-          EXPORT              ${LIBRARY_EXPORT_FILE}
+-          ARCHIVE DESTINATION lib )
+-  #target_link_libraries( rtt-transport-mqueue-${OROCOS_TARGET}_plugin orocos-rtt-mqueue-${OROCOS_TARGET}_static)
+-ENDIF( BUILD_STATIC )
++	IF ( BUILD_STATIC )
++  	INSTALL(TARGETS             orocos-rtt-mqueue-${OROCOS_TARGET}_static
++  	        EXPORT              ${LIBRARY_EXPORT_FILE}
++  	        ARCHIVE DESTINATION lib )
++  	#target_link_libraries( rtt-transport-mqueue-${OROCOS_TARGET}_plugin orocos-rtt-mqueue-${OROCOS_TARGET}_static)
++	ENDIF( BUILD_STATIC )
+ 
+-IF(NOT NOT_BUILD_SHARED)
+-  INSTALL(TARGETS             orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic
+-          EXPORT              ${LIBRARY_EXPORT_FILE}
+-          LIBRARY DESTINATION lib RUNTIME DESTINATION bin )
+-  INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/orocos-rtt-mqueue-${OROCOS_TARGET}.pc DESTINATION  lib/pkgconfig )
+-ENDIF(NOT NOT_BUILD_SHARED)
++  IF(NOT NOT_BUILD_SHARED)
++    INSTALL(TARGETS             orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic
++            EXPORT              ${LIBRARY_EXPORT_FILE}
++            LIBRARY DESTINATION lib RUNTIME DESTINATION bin )
++    target_link_libraries( rtt-transport-mqueue-${OROCOS_TARGET}_plugin orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic)
++  ENDIF(NOT NOT_BUILD_SHARED)
+ 
+   SET(RTT_DEFINITIONS "${OROCOS-RTT_DEFINITIONS}")
+   ADD_RTT_TYPEKIT( rtt-transport-mqueue ${RTT_VERSION} MQLib.cpp)
+-  target_link_libraries( rtt-transport-mqueue-${OROCOS_TARGET}_plugin orocos-rtt-mqueue-${OROCOS_TARGET}_dynamic)
++  INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/orocos-rtt-mqueue-${OROCOS_TARGET}.pc DESTINATION  lib/pkgconfig )
+   set_target_properties( rtt-transport-mqueue-${OROCOS_TARGET}_plugin PROPERTIES
+     LINK_FLAGS "${MQ_LDFLAGS} ${CMAKE_LD_FLAGS}")
+ 
+   INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/rtt-mqueue-config.h TransportPlugin.hpp DESTINATION include/rtt/transports/mqueue )
+ 
+ ENDIF(ENABLE_MQ)
+-
+-- 
+1.9.1
+

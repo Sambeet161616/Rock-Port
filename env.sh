@@ -10,11 +10,14 @@ export INSTALL_PREFIX=/home/sambeet/NewRockPort/x86/Install
 export TARGET=i386-rtems
 export BSP=pc486
 export ARCH=x86
+export OROCOS_TARGET=rtems
 
 export RTEMS_INSTALL_DIR=${INSTALL_PREFIX}/rtems
 export OMNIORB4_DIR=${INSTALL_PREFIX}/omniORB/
 export XERCES_ROOT_DIR=${INSTALL_PREFIX}/xerces/
 export EIGEN2_DIR=${INSTALL_PREFIX}/eigen/include/eigen2/
+export CMAKE_LIBRARY_PATH="${INSTALL_PREFIX}/boost/lib:$CMAKE_LIBRARY_PATH"
+export CMAKE_INCLUDE_PATH="${INSTALL_PREFIX}/boost/include:$CMAKE_INCLUDE_PATH"
 
 export PATH=$PATH:${RTEMS_INSTALL_DIR}/bin;
 

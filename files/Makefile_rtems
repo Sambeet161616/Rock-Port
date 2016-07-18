@@ -17,7 +17,7 @@ configure-rtems:rtems-dir
 		cd $(TOOLS)rtems-$(RTEMS_VER)$(RC);\
 		$(EXPORT_PATH);\
 		../rtems-$(RTEMS_VER)$(RC)/configure --target=$(TARGET)\
-		--disable-posix \
+		--enable-posix \
 		--enable-networking \
 		--disable-cxx \
 		--enable-rtemsbsp=$(BSP) \

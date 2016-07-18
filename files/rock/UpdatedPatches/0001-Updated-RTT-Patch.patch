@@ -1,7 +1,7 @@
 From fef90c6034d52373ae8bef62b61d8a9773db03a4 Mon Sep 17 00:00:00 2001
 From: Sambeet161616 <b313036@iiit-bh.ac.in>
 Date: Thu, 23 Jun 2016 05:09:31 +0530
-Subject: [PATCH] Updated RTT Patch
+Subject: [PATCH 1/2] Updated RTT Patch
 
 ---
  CMakeLists.txt                                  | 11 ++++
