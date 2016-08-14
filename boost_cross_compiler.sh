@@ -21,7 +21,7 @@ if ! [ -d ${BOOST_DIR} ]; then
    
    echo "Applying patches"
    cd ${BUILD_PREFIX}
-   patch -p0 -i ${BUILD_PREFIX}/scripts/files/boost_${BOOST_VER}.patch
+   patch -p0 -i ${BUILD_PREFIX}/Rock-Port_ana/files/boost_${BOOST_VER}.patch
 else
    echo "Using existing installation ${BOOST_DIR}"
    PATH=${BOOST_DIR}/tools/jam/src:$PATH
