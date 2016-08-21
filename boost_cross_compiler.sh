@@ -1,12 +1,13 @@
-BOOST_VER=1_44_0
+BOOST_VER=1_54_0
 BOOST_PKG=${BUILD_PREFIX}/pkgs/boost_${BOOST_VER}.tar.bz2
 BOOST_DIR=${BUILD_PREFIX}/boost_${BOOST_VER}
 BOOST_URL=http://sourceforge.net/projects/boost/files/boost/${BOOST_VER//_/.}/boost_${BOOST_VER}.tar.bz2/download
 
+
 if ! [ -d ${BOOST_DIR} ]; then
    if ! [ -e ${BOOST_PKG} ]; then
       echo "${BOOST_PKG} not found. Downloading..."; echo
-      wget ${BOOST_URL} -O ${BOOST_PKG} || exit
+      wget ${BOOST_URL} -O ${BOOST_PKG}
    fi
 
    cd ${BUILD_PREFIX}
