@@ -1,3 +1,23 @@
+#
+#  RTEMS_MAKEFILE_PATH is typically set in an environment variable
+#
+
+PGM=${ARCH}/hello.exe
+
+# optional managers required
+MANAGERS=all
+
+# C source names
+CSRCS = Manual_example.c
+COBJS = $(CSRCS:%.c=${ARCH}/%.o)
+
 include $(RTEMS_MAKEFILE_PATH)/Makefile.inc
 include $(RTEMS_CUSTOM)
-include $(RTEMS_SHARE)/make/directory.cfg
+include $(PROJECT_ROOT)/make/leaf.cfg
+
+OBJS= $(COBJS) $(CXXOBJS) $(ASOBJS)
+
+all:    ${ARCH} $(PGM)
+
+$(PGM): $(OBJS)
+	$(make-exe)
