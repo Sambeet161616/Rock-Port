@@ -1,3 +1,4 @@
+//This is the standard application template which will be modified to include Eigen.Eigen had not yet been added
 #include <rtems.h> //
 rtems_task user_application(rtems_task_argument argument);
 rtems_task init_task(
